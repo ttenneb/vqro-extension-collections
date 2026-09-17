@@ -10,7 +10,7 @@ namespaces = ["vqro.collections"]
 [[services]]
 id = "collections"
 provides = ["host_document"]
-capabilities = ["host.terminals.read"]
+capabilities = ["host.state.read", "host.terminals.read"]
 
 [services.runtime]
 kind = "component"

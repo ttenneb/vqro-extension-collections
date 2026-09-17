@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use wasmparser::{Parser, Payload, Validator, WasmFeatures};
 
-const CONTRACT_FILES: [(&str, &str); 12] = [
+const CONTRACT_FILES: [(&str, &str); 13] = [
     (
         "contracts/vqro-extension-service/world.wit",
         "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf",
@@ -16,6 +16,10 @@ const CONTRACT_FILES: [(&str, &str); 12] = [
     (
         "contracts/api/vqro-service-v1.schema.json",
         "3c2712d8b92b4908a40b92360e7fe089e914a88b1cb07640dc8d5c5d7129bdbc",
+    ),
+    (
+        "contracts/api/host-state-v1.schema.json",
+        "76f18212c69780c5100594598a3aa388ddf70e4d275461ca1cbab9b2418f77bd",
     ),
     (
         "contracts/api/host-terminals-v1.schema.json",
@@ -31,7 +35,7 @@ const CONTRACT_FILES: [(&str, &str); 12] = [
     ),
     (
         "contracts/api/host-document-v2.md",
-        "cd7079f829f9af4b5e4e943c3f34ad77911f8dfc43fb65855e5a07c8c5aa55b1",
+        "50acbfdb201b1a56006f47a8c6a6cdb20761b0bd1d6d8c7b0dd65a0ddf5d3832",
     ),
     (
         "contracts/fixtures/host-document-v2/valid.json",
@@ -55,7 +59,7 @@ const CONTRACT_FILES: [(&str, &str); 12] = [
     ),
     (
         "contracts/PROVENANCE.md",
-        "96aca18d936ea2ad44361d6eccd4fa9d331711bed1f75349fdf21b99606231f2",
+        "61bb9dab61ac377c971151fea67a7da5b26bd19e44a62aeac67b4317ddbca128",
     ),
 ];
 #[cfg(test)]
@@ -66,7 +70,7 @@ const SOURCE_ONLY_PROFILE_FILES: [&str; 5] = [
     "profiles/fixtures/collections-policy-v1-invalid.json",
     "profiles/fixtures/collections-policy-v1.json",
 ];
-const EXPECTED_PACKAGE_PATHS: [&str; 17] = [
+const EXPECTED_PACKAGE_PATHS: [&str; 18] = [
     "LICENSE",
     "README.md",
     "checksums.sha256",
@@ -74,6 +78,7 @@ const EXPECTED_PACKAGE_PATHS: [&str; 17] = [
     "contracts/api/host-document-render-v2.schema.json",
     "contracts/api/host-document-v2.md",
     "contracts/api/host-document-v2.schema.json",
+    "contracts/api/host-state-v1.schema.json",
     "contracts/api/host-terminals-v1.schema.json",
     "contracts/api/vqro-service-v1.schema.json",
     "contracts/fixtures/host-document-v2/invalid-action.json",
@@ -86,11 +91,11 @@ const EXPECTED_PACKAGE_PATHS: [&str; 17] = [
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "42745bb5af54b0dced06cf0e92e8c95383e42641c105f6256249ede67af2c634";
+    "36230691235fe70ef21b06e1d94c98d9888bce68ed4587d3c979bf03f9d2980b";
 const EXPECTED_MANIFEST_SHA256: &str =
-    "73c6accc4e35f9030731973e84ee3b1cce252c1034ab99e78ca6425cf40e9295";
+    "4d270e2646cde5764260e5781eb837c7964078731fb5981578b1d08e80957034";
 const EXPECTED_COMPONENT_SHA256: &str =
-    "44e48062488a7ed66a213d84e4f46b7e19cce1bf8b64c08ea83292cb757b49e0";
+    "819963c8aeee9d3c5c1ba05cc3b4f6fd73ace14b030ffd55fbd2e1ac95b0c1bc";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -346,7 +351,7 @@ fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
         "version = \"0.0.0\"",
         "min_vqro_version = \"0.9.0\"",
         "provides = [\"host_document\"]",
-        "capabilities = [\"host.terminals.read\"]",
+        "capabilities = [\"host.state.read\", \"host.terminals.read\"]",
         "kind = \"component\"",
         "world = \"vqro:extension/service@1.0.0\"",
     ] {
@@ -363,7 +368,11 @@ fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
         "command =",
         "_extension-service",
         "focus_terminal",
-        "host.state",
+        "host.state.write",
+        "state.transact",
+        "host.action",
+        "host.effect",
+        "activation",
         "wasi",
     ] {
         if manifest.contains(forbidden) {
@@ -454,6 +463,8 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
     }
     for marker in [
         b"host.document.render".as_slice(),
+        b"host.state.read".as_slice(),
+        b"state.snapshot".as_slice(),
         b"host.terminals.read".as_slice(),
         b"terminals.snapshot".as_slice(),
     ] {
@@ -466,7 +477,13 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
             bail!("component must contain exactly one reviewed method/capability marker");
         }
     }
-    for marker in [b"host.state".as_slice(), b"focus_terminal".as_slice()] {
+    for marker in [
+        b"host.state.write".as_slice(),
+        b"state.transact".as_slice(),
+        b"host.action".as_slice(),
+        b"host.effect".as_slice(),
+        b"focus_terminal".as_slice(),
+    ] {
         if bytes.windows(marker.len()).any(|window| window == marker) {
             bail!("component contains a forbidden authority marker");
         }

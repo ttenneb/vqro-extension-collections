@@ -1,8 +1,10 @@
 //! Native-testable service dispatcher with one injectable read-only host bridge.
 
+use crate::policy::{decode_namespace, NAMESPACE as POLICY_NAMESPACE};
 use crate::projection::{
     project, valid_producer, valid_scope, HostDocument, ProjectionError, RenderParams,
-    TerminalSnapshot, MAX_DOCUMENT_BYTES, MAX_SNAPSHOT_BYTES,
+    StateSnapshot, TerminalSnapshot, MAX_DOCUMENT_BYTES, MAX_SNAPSHOT_BYTES,
+    MAX_STATE_SNAPSHOT_BYTES,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
@@ -124,34 +126,57 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
         return Err(InvokeError::Cancelled);
     }
 
-    let call_id = call_id(request_bytes);
-    let host_call = RuntimeHostCall {
-        r#type: "host_call",
-        call_id: &call_id,
-        identity: &request.identity,
-        depth: 1,
-        capability: "host.terminals.read",
-        method: "terminals.snapshot",
-        namespace: NAMESPACE,
-        params: SnapshotParams {
-            contract: "host.terminals.v1",
-        },
-    };
-    let host_call_bytes =
-        canonical_json_bytes(&host_call).map_err(|_| InvokeError::InvalidRequest)?;
-    if host_call_bytes.len() > MAX_FRAME_BYTES {
-        return Err(InvokeError::InvalidRequest);
+    let request_digest = format!("{:x}", Sha256::digest(request_bytes));
+    let state_call_id = format!("collections-state-{request_digest}");
+    let state_bytes = perform_call(
+        bridge,
+        &request.identity,
+        &state_call_id,
+        "host.state.read",
+        "state.snapshot",
+        "host.state.v1",
+    )?;
+    let state: StateSnapshot = decode_result(
+        &state_bytes,
+        &state_call_id,
+        &request.identity,
+        MAX_STATE_SNAPSHOT_BYTES,
+    )?;
+    if state.contract != "host.state.v1"
+        || state.namespace != POLICY_NAMESPACE
+        || !valid_state_identifier(&state.store_id, false)
+        || !valid_state_identifier(&state.namespace, true)
+        || state.store_generation == 0
+        || state.revision == u64::MAX
+        || serde_json::to_value(&state).map_err(|_| InvokeError::InvalidSnapshot)?
+            != serde_json::from_slice::<serde_json::Value>(&state_bytes)
+                .ok()
+                .and_then(|value| value.get("result").cloned())
+                .ok_or(InvokeError::InvalidSnapshot)?
+    {
+        return Err(InvokeError::InvalidSnapshot);
     }
-
-    // Store the result so cancellation is checked after every attempted call,
-    // including a bridge-level error, before any response is inspected.
-    let response_result = bridge.call(&host_call_bytes);
+    let policies = decode_namespace(&state.values).map_err(|_| InvokeError::InvalidSnapshot)?;
     if bridge.cancelled() {
         return Err(InvokeError::Cancelled);
     }
-    let response_bytes = response_result.map_err(|_| InvokeError::HostCallFailed)?;
-    let snapshot = decode_response(&response_bytes, &call_id, &request.identity)?;
-    let document = project(params, &snapshot).map_err(map_projection_error)?;
+
+    let terminal_call_id = format!("collections-terminals-{request_digest}");
+    let terminal_bytes = perform_call(
+        bridge,
+        &request.identity,
+        &terminal_call_id,
+        "host.terminals.read",
+        "terminals.snapshot",
+        "host.terminals.v1",
+    )?;
+    let snapshot: TerminalSnapshot = decode_result(
+        &terminal_bytes,
+        &terminal_call_id,
+        &request.identity,
+        MAX_SNAPSHOT_BYTES,
+    )?;
+    let document = project(params, &state, &policies, &snapshot).map_err(map_projection_error)?;
     encode_document(&document)
 }
 
@@ -185,11 +210,41 @@ fn validate_request(request: &RuntimeRequest) -> Result<RenderParams, InvokeErro
     Ok(params)
 }
 
-fn decode_response(
+fn perform_call<B: HostBridge>(
+    bridge: &mut B,
+    identity: &RuntimeIdentity,
+    call_id: &str,
+    capability: &'static str,
+    method: &'static str,
+    contract: &'static str,
+) -> Result<Vec<u8>, InvokeError> {
+    let call = RuntimeHostCall {
+        r#type: "host_call",
+        call_id,
+        identity,
+        depth: 1,
+        capability,
+        method,
+        namespace: NAMESPACE,
+        params: SnapshotParams { contract },
+    };
+    let bytes = canonical_json_bytes(&call).map_err(|_| InvokeError::InvalidRequest)?;
+    if bytes.len() > MAX_FRAME_BYTES {
+        return Err(InvokeError::InvalidRequest);
+    }
+    let response = bridge.call(&bytes);
+    if bridge.cancelled() {
+        return Err(InvokeError::Cancelled);
+    }
+    response.map_err(|_| InvokeError::HostCallFailed)
+}
+
+fn decode_result<T: for<'de> Deserialize<'de>>(
     bytes: &[u8],
     expected_call_id: &str,
     expected_identity: &RuntimeIdentity,
-) -> Result<TerminalSnapshot, InvokeError> {
+    max_result_bytes: usize,
+) -> Result<T, InvokeError> {
     if bytes.len() > MAX_FRAME_BYTES {
         return Err(InvokeError::InvalidHostResponse);
     }
@@ -203,7 +258,7 @@ fn decode_response(
     }
     match (response.result, response.error) {
         (Some(result), None) => {
-            if result.get().len() > MAX_SNAPSHOT_BYTES {
+            if result.get().len() > max_result_bytes {
                 return Err(InvokeError::InvalidHostResponse);
             }
             serde_json::from_str(result.get()).map_err(|_| InvokeError::InvalidSnapshot)
@@ -216,6 +271,15 @@ fn decode_response(
         }
         _ => Err(InvokeError::InvalidHostResponse),
     }
+}
+
+fn valid_state_identifier(value: &str, require_dot: bool) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && (!require_dot || value.contains('.'))
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
 }
 
 fn encode_document(document: &HostDocument) -> Result<Vec<u8>, InvokeError> {
@@ -249,10 +313,6 @@ fn canonical_json_bytes(value: &impl Serialize) -> Result<Vec<u8>, serde_json::E
     }
 
     serde_json::to_vec(&sort(serde_json::to_value(value)?))
-}
-
-fn call_id(request: &[u8]) -> String {
-    format!("collections-{:x}", Sha256::digest(request))
 }
 
 fn opaque_id(value: &str) -> bool {

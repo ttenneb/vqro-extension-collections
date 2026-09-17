@@ -1,3 +1,4 @@
+use crate::policy::PolicyRecord;
 use crate::projection::*;
 use crate::service::{self, HostBridge, InvokeError};
 use serde_json::{json, Value};
@@ -30,6 +31,25 @@ fn snapshot(layout: Vec<LayoutItem>) -> TerminalSnapshot {
     };
     value.fingerprint_sha256 = canonical_fingerprint(&value).unwrap();
     value
+}
+
+fn state_snapshot() -> StateSnapshot {
+    StateSnapshot {
+        contract: "host.state.v1".into(),
+        store_id: "session:test".into(),
+        store_generation: 7,
+        namespace: "vqro.collections".into(),
+        revision: 0,
+        sequence: 0,
+        values: Default::default(),
+    }
+}
+
+fn project_default(
+    params: RenderParams,
+    snapshot: &TerminalSnapshot,
+) -> Result<HostDocument, ProjectionError> {
+    project(params, &state_snapshot(), &Default::default(), snapshot)
 }
 
 fn params() -> RenderParams {
@@ -85,10 +105,110 @@ impl Bridge {
     fn new(reply: Reply) -> Self {
         Self {
             reply,
-            cancellation: VecDeque::from([false, false]),
+            cancellation: VecDeque::from([false, false, false, false]),
             calls: Vec::new(),
             call_bytes: Vec::new(),
         }
+    }
+}
+
+#[derive(Clone)]
+enum MethodReply {
+    Valid,
+    Result(Value),
+    Error,
+    WrongEnvelope,
+    Envelope(Value),
+    RawResult(usize),
+}
+
+struct MethodBridge {
+    state: MethodReply,
+    terminal: MethodReply,
+    cancellation: VecDeque<bool>,
+    calls: Vec<String>,
+    attempts: std::collections::BTreeMap<String, usize>,
+    transport_failure: Option<(String, usize)>,
+}
+
+impl MethodBridge {
+    fn new(state: MethodReply, terminal: MethodReply) -> Self {
+        Self {
+            state,
+            terminal,
+            cancellation: VecDeque::from([false, false, false, false]),
+            calls: Vec::new(),
+            attempts: Default::default(),
+            transport_failure: None,
+        }
+    }
+
+    fn fail_transport(mut self, method: &str, attempt: usize) -> Self {
+        self.transport_failure = Some((method.into(), attempt));
+        self
+    }
+}
+
+impl HostBridge for MethodBridge {
+    type Error = ();
+
+    fn cancelled(&mut self) -> bool {
+        self.cancellation.pop_front().unwrap_or(false)
+    }
+
+    fn call(&mut self, request: &[u8]) -> Result<Vec<u8>, Self::Error> {
+        let call: Value = serde_json::from_slice(request).unwrap();
+        let method = call["method"].as_str().unwrap().to_string();
+        self.calls.push(method.clone());
+        let attempt = self.attempts.entry(method.clone()).or_default();
+        *attempt += 1;
+        if self
+            .transport_failure
+            .as_ref()
+            .is_some_and(|(failed_method, failed_attempt)| {
+                failed_method == &method && *failed_attempt == *attempt
+            })
+        {
+            return Err(());
+        }
+        let reply = if method == "state.snapshot" {
+            &self.state
+        } else {
+            &self.terminal
+        };
+        let result = match reply {
+            MethodReply::Valid if method == "state.snapshot" => serde_json::to_value(state_snapshot()).unwrap(),
+            MethodReply::Valid => serde_json::to_value(mixed_snapshot()).unwrap(),
+            MethodReply::Result(value) => value.clone(),
+            MethodReply::RawResult(size) => {
+                let raw = format!("\"{}\"", "x".repeat(size.saturating_sub(2)));
+                return Ok(format!(
+                    "{{\"type\":\"host_response\",\"call_id\":{},\"identity\":{},\"result\":{raw}}}",
+                    serde_json::to_string(&call["call_id"]).unwrap(),
+                    serde_json::to_string(&call["identity"]).unwrap(),
+                ).into_bytes());
+            }
+            MethodReply::Error => return Ok(serde_json::to_vec(&json!({
+                "type": "host_response", "call_id": call["call_id"], "identity": call["identity"],
+                "error": {"code": "private", "message": "private"}
+            })).unwrap()),
+            MethodReply::WrongEnvelope => return Ok(serde_json::to_vec(&json!({
+                "type": "wrong", "call_id": call["call_id"], "identity": call["identity"], "result": {}
+            })).unwrap()),
+            MethodReply::Envelope(value) => {
+                let mut value = value.clone();
+                if value.get("call_id") == Some(&json!("$call")) {
+                    value["call_id"] = call["call_id"].clone();
+                }
+                if value.get("identity") == Some(&json!("$identity")) {
+                    value["identity"] = call["identity"].clone();
+                }
+                return Ok(serde_json::to_vec(&value).unwrap());
+            }
+        };
+        Ok(serde_json::to_vec(&json!({
+            "type": "host_response", "call_id": call["call_id"], "identity": call["identity"], "result": result
+        })).unwrap())
     }
 }
 
@@ -104,13 +224,20 @@ impl HostBridge for Bridge {
         self.call_bytes.push(request.to_vec());
         self.calls.push(call.clone());
         match &self.reply {
-            Reply::Snapshot(snapshot) => Ok(serde_json::to_vec(&json!({
-                "type": "host_response",
-                "call_id": call["call_id"],
-                "identity": call["identity"],
-                "result": snapshot
-            }))
-            .unwrap()),
+            Reply::Snapshot(snapshot) => {
+                let result = if call["method"] == "state.snapshot" {
+                    serde_json::to_value(state_snapshot()).unwrap()
+                } else {
+                    serde_json::to_value(snapshot).unwrap()
+                };
+                Ok(serde_json::to_vec(&json!({
+                    "type": "host_response",
+                    "call_id": call["call_id"],
+                    "identity": call["identity"],
+                    "result": result
+                }))
+                .unwrap())
+            }
             Reply::Envelope(value) => {
                 let mut value = value.clone();
                 if value.get("call_id") == Some(&json!("$call")) {
@@ -133,7 +260,7 @@ impl HostBridge for Bridge {
     }
 }
 
-fn invoke(bridge: &mut Bridge, request: &Value) -> Result<Value, InvokeError> {
+fn invoke<B: HostBridge>(bridge: &mut B, request: &Value) -> Result<Value, InvokeError> {
     service::invoke(bridge, &serde_json::to_vec(request).unwrap())
         .map(|bytes| serde_json::from_slice(&bytes).unwrap())
 }
@@ -164,7 +291,7 @@ fn mixed_empty_and_selection_golden() {
         fingerprint,
         "ed5988fc573adfda94636fb85ab86064ea55dc802db7abb0185edfe5c86b8fa8"
     );
-    let document = project(params(), &snapshot).unwrap();
+    let document = project_default(params(), &snapshot).unwrap();
     assert_eq!(
         serde_json::to_value(document).unwrap(),
         json!({
@@ -173,6 +300,11 @@ fn mixed_empty_and_selection_golden() {
             "scope": params().scope,
             "revision": 12,
             "dependencies": [{
+                "contract": "host.state.v1",
+                "scope_id": "state_c44bb5f411b1c3102a74c7fbd1b189ab9f186b39995aeab32dafb8e0e1addc2d",
+                "revision": 1,
+                "generation": 7
+            }, {
                 "contract": "host.terminals.v1",
                 "scope_id": format!("{TAB}/{fingerprint}"),
                 "revision": 1,
@@ -181,19 +313,189 @@ fn mixed_empty_and_selection_golden() {
             "roots": ["node-000", "node-001", "node-003"],
             "nodes": [
                 {"kind":"terminal_slot","id":"node-000","accessibility":{"name":"Terminal"},"terminal_id":TERM1},
-                {"kind":"group","id":"node-001","accessibility":{"name":"Terminal group"},"children":["node-002"]},
+                {"kind":"group","id":"node-001","accessibility":{"name":"Collection"},"children":["node-002"]},
                 {"kind":"terminal_slot","id":"node-002","accessibility":{"name":"Terminal"},"terminal_id":TERM2},
-                {"kind":"group","id":"node-003","accessibility":{"name":"Terminal group"},"children":[]}
+                {"kind":"group","id":"node-003","accessibility":{"name":"Collection"},"children":[]}
             ]
         })
     );
 }
 
 #[test]
+fn policy_label_archive_and_stale_ids_preserve_exact_terminal_coverage() {
+    let snapshot = snapshot(vec![LayoutItem::Container {
+        container_id: "container_0000000000000001".into(),
+        terminal_ids: vec![TERM2.into(), TERM1.into()],
+        selected_terminal_id: Some(TERM2.into()),
+    }]);
+    let mut policies = std::collections::BTreeMap::new();
+    policies.insert(
+        "container_0000000000000001".into(),
+        PolicyRecord {
+            schema: "vqro.collections.policy".into(),
+            schema_version: 1,
+            container_id: "container_0000000000000001".into(),
+            label: Some(String::new()),
+            archived_terminal_ids: vec![
+                TERM1.into(),
+                "term_00000000000000000000000000000063".into(),
+            ],
+        },
+    );
+    let document = project(params(), &state_snapshot(), &policies, &snapshot).unwrap();
+    let value = serde_json::to_value(document).unwrap();
+    assert_eq!(
+        value["nodes"][0]["children"],
+        json!(["node-001", "node-002", "node-003"])
+    );
+    assert_eq!(value["nodes"][1]["text"], "");
+    assert_eq!(value["nodes"][2]["terminal_id"], TERM2);
+    assert_eq!(value["nodes"][2]["accessibility"]["name"], "Terminal");
+    assert_eq!(value["nodes"][3]["terminal_id"], TERM1);
+    assert_eq!(
+        value["nodes"][3]["accessibility"]["name"],
+        "Archived terminal"
+    );
+    assert!(!serde_json::to_string(&value)
+        .unwrap()
+        .contains("00000000000000000000000000000063"));
+}
+
+#[test]
+fn host_state_dependency_vector_and_field_separation_are_exact() {
+    let base = StateSnapshot {
+        contract: "host.state.v1".into(),
+        store_id: "session:0123456789abcdef".into(),
+        store_generation: 7,
+        namespace: "example.extension".into(),
+        revision: 0,
+        sequence: 19,
+        values: Default::default(),
+    };
+    let dependency = state_snapshot_dependency(&base).unwrap();
+    assert_eq!(
+        dependency.scope_id,
+        "state_883cb7c92faf86d48599f968d153ec1e1a02336da1db8e622eddb8e3c1fd1f97"
+    );
+    assert_eq!(dependency.revision, 1);
+    assert_eq!(dependency.generation, 7);
+
+    let mut changed_store = base.clone();
+    changed_store.store_id.push('0');
+    let mut changed_namespace = base.clone();
+    changed_namespace.namespace.push('0');
+    let mut alternate_boundaries = base.clone();
+    alternate_boundaries.store_id = "session:0123456789abcdefe".into();
+    alternate_boundaries.namespace = "xample.extension".into();
+    let mut changed_revision = base.clone();
+    changed_revision.revision = 1;
+    let mut changed_generation = base.clone();
+    changed_generation.store_generation = 8;
+    assert_ne!(
+        state_snapshot_dependency(&changed_store).unwrap().scope_id,
+        dependency.scope_id
+    );
+    assert_ne!(
+        state_snapshot_dependency(&changed_namespace)
+            .unwrap()
+            .scope_id,
+        dependency.scope_id
+    );
+    assert_ne!(
+        state_snapshot_dependency(&alternate_boundaries)
+            .unwrap()
+            .scope_id,
+        dependency.scope_id,
+        "length prefixes bind the store/namespace boundary"
+    );
+    assert_eq!(
+        state_snapshot_dependency(&changed_revision)
+            .unwrap()
+            .scope_id,
+        dependency.scope_id
+    );
+    assert_eq!(
+        state_snapshot_dependency(&changed_revision)
+            .unwrap()
+            .revision,
+        2
+    );
+    assert_eq!(
+        state_snapshot_dependency(&changed_generation)
+            .unwrap()
+            .scope_id,
+        dependency.scope_id
+    );
+    assert_eq!(
+        state_snapshot_dependency(&changed_generation)
+            .unwrap()
+            .generation,
+        8
+    );
+    let mut non_tuple = base.clone();
+    non_tuple.sequence += 1;
+    non_tuple.values.insert("other".into(), json!(1));
+    assert_eq!(
+        state_snapshot_dependency(&non_tuple).unwrap(),
+        dependency,
+        "sequence and values are not dependency tuple fields"
+    );
+}
+
+#[test]
+fn control_and_aggregate_policy_labels_fail_document_projection() {
+    let one_container = snapshot(vec![LayoutItem::Container {
+        container_id: "container_0000000000000001".into(),
+        terminal_ids: Vec::new(),
+        selected_terminal_id: None,
+    }]);
+    let mut control = std::collections::BTreeMap::new();
+    control.insert(
+        "container_0000000000000001".into(),
+        PolicyRecord {
+            schema: "vqro.collections.policy".into(),
+            schema_version: 1,
+            container_id: "container_0000000000000001".into(),
+            label: Some("bad\nlabel".into()),
+            archived_terminal_ids: Vec::new(),
+        },
+    );
+    assert_eq!(
+        project(params(), &state_snapshot(), &control, &one_container),
+        Err(ProjectionError::DocumentInvalid)
+    );
+
+    let mut layout = Vec::new();
+    let mut aggregate = std::collections::BTreeMap::new();
+    for index in 1..=17_u64 {
+        let container_id = format!("container_{index:016x}");
+        layout.push(LayoutItem::Container {
+            container_id: container_id.clone(),
+            terminal_ids: Vec::new(),
+            selected_terminal_id: None,
+        });
+        aggregate.insert(
+            container_id.clone(),
+            PolicyRecord {
+                schema: "vqro.collections.policy".into(),
+                schema_version: 1,
+                container_id,
+                label: Some("x".repeat(4096)),
+                archived_terminal_ids: Vec::new(),
+            },
+        );
+    }
+    assert_eq!(
+        project(params(), &state_snapshot(), &aggregate, &snapshot(layout)),
+        Err(ProjectionError::DocumentInvalid)
+    );
+}
+
+#[test]
 fn empty_snapshot_is_empty_forest_and_repeat_is_deterministic() {
     let snapshot = snapshot(Vec::new());
-    let first = serde_json::to_vec(&project(params(), &snapshot).unwrap()).unwrap();
-    let second = serde_json::to_vec(&project(params(), &snapshot).unwrap()).unwrap();
+    let first = serde_json::to_vec(&project_default(params(), &snapshot).unwrap()).unwrap();
+    let second = serde_json::to_vec(&project_default(params(), &snapshot).unwrap()).unwrap();
     assert_eq!(first, second);
     let value: Value = serde_json::from_slice(&first).unwrap();
     assert_eq!(value["roots"], json!([]));
@@ -215,25 +517,35 @@ fn maximum_public_snapshot_projects_with_exact_coverage() {
             selected_terminal_id: None,
         });
     }
-    let document = project(params(), &snapshot(layout)).unwrap();
+    let document = project_default(params(), &snapshot(layout)).unwrap();
     assert_eq!(document.roots.len(), 64);
     assert_eq!(document.nodes.len(), 64);
 }
 
 #[test]
-fn service_uses_one_exact_read_call_and_emits_no_forbidden_fields() {
+fn service_uses_two_exact_read_calls_and_emits_no_forbidden_fields() {
     let mut bridge = Bridge::new(Reply::Snapshot(mixed_snapshot()));
     let output = invoke(&mut bridge, &request_value()).unwrap();
-    assert_eq!(bridge.calls.len(), 1);
-    let call = &bridge.calls[0];
-    assert_eq!(call["type"], "host_call");
-    assert_eq!(call["depth"], 1);
-    assert_eq!(call["capability"], "host.terminals.read");
-    assert_eq!(call["method"], "terminals.snapshot");
-    assert_eq!(call["namespace"], "vqro.collections");
-    assert_eq!(call["identity"], request_value()["identity"]);
-    assert_eq!(call["params"], json!({"contract":"host.terminals.v1"}));
-    assert!(call["call_id"].as_str().unwrap().len() <= 128);
+    assert_eq!(bridge.calls.len(), 2);
+    for call in &bridge.calls {
+        assert_eq!(call["type"], "host_call");
+        assert_eq!(call["depth"], 1);
+        assert_eq!(call["namespace"], "vqro.collections");
+        assert_eq!(call["identity"], request_value()["identity"]);
+        assert!(call["call_id"].as_str().unwrap().len() <= 128);
+    }
+    assert_eq!(bridge.calls[0]["capability"], "host.state.read");
+    assert_eq!(bridge.calls[0]["method"], "state.snapshot");
+    assert_eq!(
+        bridge.calls[0]["params"],
+        json!({"contract":"host.state.v1"})
+    );
+    assert_eq!(bridge.calls[1]["capability"], "host.terminals.read");
+    assert_eq!(bridge.calls[1]["method"], "terminals.snapshot");
+    assert_eq!(
+        bridge.calls[1]["params"],
+        json!({"contract":"host.terminals.v1"})
+    );
     let encoded = serde_json::to_string(&output).unwrap();
     for forbidden in [
         "PaneId", "pane_id", "geometry", "archive", "label", "action", "effect", "selected",
@@ -246,7 +558,9 @@ fn service_uses_one_exact_read_call_and_emits_no_forbidden_fields() {
 fn wit_boundary_bytes_use_recursive_canonical_object_order() {
     let request = request_value();
     let request_bytes = serde_json::to_vec(&request).unwrap();
-    let call_id = format!("collections-{:x}", sha2::Sha256::digest(&request_bytes));
+    let digest = format!("{:x}", sha2::Sha256::digest(&request_bytes));
+    let state_call_id = format!("collections-state-{digest}");
+    let terminal_call_id = format!("collections-terminals-{digest}");
     let snapshot = mixed_snapshot();
     let fingerprint = snapshot.fingerprint_sha256.clone();
     let mut bridge = Bridge::new(Reply::Snapshot(snapshot));
@@ -256,17 +570,21 @@ fn wit_boundary_bytes_use_recursive_canonical_object_order() {
     assert_eq!(
         bridge.call_bytes[0],
         format!(
-            "{{\"call_id\":\"{call_id}\",\"capability\":\"host.terminals.read\",\"depth\":1,\"identity\":{{\"generation\":9,\"namespace\":\"vqro.collections\",\"package_id\":\"vqro.collections\",\"service_id\":\"collections\"}},\"method\":\"terminals.snapshot\",\"namespace\":\"vqro.collections\",\"params\":{{\"contract\":\"host.terminals.v1\"}},\"type\":\"host_call\"}}"
+            "{{\"call_id\":\"{state_call_id}\",\"capability\":\"host.state.read\",\"depth\":1,\"identity\":{{\"generation\":9,\"namespace\":\"vqro.collections\",\"package_id\":\"vqro.collections\",\"service_id\":\"collections\"}},\"method\":\"state.snapshot\",\"namespace\":\"vqro.collections\",\"params\":{{\"contract\":\"host.state.v1\"}},\"type\":\"host_call\"}}"
         )
         .into_bytes()
     );
     assert_eq!(
-        document_bytes,
+        bridge.call_bytes[1],
         format!(
-            "{{\"contract\":\"host.document.v2\",\"dependencies\":[{{\"contract\":\"host.terminals.v1\",\"generation\":5,\"revision\":1,\"scope_id\":\"{TAB}/{fingerprint}\"}}],\"nodes\":[{{\"accessibility\":{{\"name\":\"Terminal\"}},\"id\":\"node-000\",\"kind\":\"terminal_slot\",\"terminal_id\":\"{TERM1}\"}},{{\"accessibility\":{{\"name\":\"Terminal group\"}},\"children\":[\"node-002\"],\"id\":\"node-001\",\"kind\":\"group\"}},{{\"accessibility\":{{\"name\":\"Terminal\"}},\"id\":\"node-002\",\"kind\":\"terminal_slot\",\"terminal_id\":\"{TERM2}\"}},{{\"accessibility\":{{\"name\":\"Terminal group\"}},\"children\":[],\"id\":\"node-003\",\"kind\":\"group\"}}],\"producer\":{{\"artifact_sha256\":\"{}\",\"package_id\":\"vqro.collections\",\"provider_generation\":10,\"runtime_generation\":9,\"scope_generation\":11,\"service_id\":\"collections\"}},\"revision\":12,\"roots\":[\"node-000\",\"node-001\",\"node-003\"],\"scope\":{{\"contract\":\"host.collection.v1\",\"scope_id\":\"shadow/current\"}}}}",
-            "a".repeat(64)
-        )
-        .into_bytes()
+            "{{\"call_id\":\"{terminal_call_id}\",\"capability\":\"host.terminals.read\",\"depth\":1,\"identity\":{{\"generation\":9,\"namespace\":\"vqro.collections\",\"package_id\":\"vqro.collections\",\"service_id\":\"collections\"}},\"method\":\"terminals.snapshot\",\"namespace\":\"vqro.collections\",\"params\":{{\"contract\":\"host.terminals.v1\"}},\"type\":\"host_call\"}}"
+        ).into_bytes()
+    );
+    let value: Value = serde_json::from_slice(&document_bytes).unwrap();
+    assert_eq!(value["dependencies"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        value["dependencies"][1]["scope_id"],
+        format!("{TAB}/{fingerprint}")
     );
 }
 
@@ -383,7 +701,7 @@ fn snapshot_contract_unknown_fingerprint_and_topology_errors_are_rejected() {
             invoke(&mut bridge, &request_value()),
             Err(InvokeError::InvalidSnapshot)
         );
-        assert_eq!(bridge.calls.len(), 1);
+        assert_eq!(bridge.calls.len(), 2);
     }
 
     let mut value = serde_json::to_value(mixed_snapshot()).unwrap();
@@ -474,6 +792,157 @@ fn host_snapshot_semantic_boundaries_match_normative_validator() {
 }
 
 #[test]
+fn method_sensitive_state_and_terminal_failures_stop_without_retry() {
+    let state_cases = [
+        (MethodReply::Result(json!({})), InvokeError::InvalidSnapshot),
+        (MethodReply::Error, InvokeError::HostCallFailed),
+        (MethodReply::WrongEnvelope, InvokeError::InvalidHostResponse),
+        (
+            MethodReply::RawResult(MAX_STATE_SNAPSHOT_BYTES),
+            InvokeError::InvalidSnapshot,
+        ),
+        (
+            MethodReply::RawResult(MAX_STATE_SNAPSHOT_BYTES + 1),
+            InvokeError::InvalidHostResponse,
+        ),
+        (
+            MethodReply::RawResult(262_145),
+            InvokeError::InvalidHostResponse,
+        ),
+    ];
+    for (reply, expected) in state_cases {
+        let mut bridge = MethodBridge::new(reply, MethodReply::Valid);
+        assert_eq!(invoke(&mut bridge, &request_value()), Err(expected));
+        assert_eq!(bridge.calls, ["state.snapshot"]);
+    }
+
+    let terminal_cases = [
+        (MethodReply::Result(json!({})), InvokeError::InvalidSnapshot),
+        (MethodReply::Error, InvokeError::HostCallFailed),
+        (MethodReply::WrongEnvelope, InvokeError::InvalidHostResponse),
+        (
+            MethodReply::RawResult(MAX_SNAPSHOT_BYTES),
+            InvokeError::InvalidSnapshot,
+        ),
+        (
+            MethodReply::RawResult(MAX_SNAPSHOT_BYTES + 1),
+            InvokeError::InvalidHostResponse,
+        ),
+        (
+            MethodReply::RawResult(262_145),
+            InvokeError::InvalidHostResponse,
+        ),
+    ];
+    for (reply, expected) in terminal_cases {
+        let mut bridge = MethodBridge::new(MethodReply::Valid, reply);
+        assert_eq!(invoke(&mut bridge, &request_value()), Err(expected));
+        assert_eq!(bridge.calls, ["state.snapshot", "terminals.snapshot"]);
+    }
+}
+
+#[test]
+fn every_state_snapshot_identity_and_shape_error_stops_before_terminals() {
+    let valid = serde_json::to_value(state_snapshot()).unwrap();
+    let mutations = [
+        ("contract", json!("wrong")),
+        ("namespace", json!("other.namespace")),
+        ("store_id", json!("")),
+        ("store_id", json!("bad/id")),
+        ("store_generation", json!(0)),
+        ("revision", json!(u64::MAX)),
+    ];
+    for (field, replacement) in mutations {
+        let mut result = valid.clone();
+        result[field] = replacement;
+        let mut bridge = MethodBridge::new(MethodReply::Result(result), MethodReply::Valid);
+        assert_eq!(
+            invoke(&mut bridge, &request_value()),
+            Err(InvokeError::InvalidSnapshot)
+        );
+        assert_eq!(bridge.calls, ["state.snapshot"]);
+    }
+    let mut unknown = valid;
+    unknown["unknown"] = json!(true);
+    let mut bridge = MethodBridge::new(MethodReply::Result(unknown), MethodReply::Valid);
+    assert_eq!(
+        invoke(&mut bridge, &request_value()),
+        Err(InvokeError::InvalidSnapshot)
+    );
+    assert_eq!(bridge.calls, ["state.snapshot"]);
+}
+
+#[test]
+fn every_malformed_envelope_is_checked_at_both_methods() {
+    let malformed = vec![
+        json!({"type":"host_call_response","call_id":"$call","identity":"$identity","result":{}}),
+        json!({"type":"host_response","call_id":"wrong","identity":"$identity","result":{}}),
+        json!({"type":"host_response","call_id":"$call","identity":{"package_id":"vqro.collections","namespace":"vqro.collections","service_id":"collections","generation":8},"result":{}}),
+        json!({"type":"host_response","call_id":"$call","identity":"$identity"}),
+        json!({"type":"host_response","call_id":"$call","identity":"$identity","result":{},"error":{"code":"x","message":"x"}}),
+        json!({"type":"host_response","call_id":"$call","identity":"$identity","result":{},"unknown":true}),
+    ];
+    for envelope in &malformed {
+        let mut state =
+            MethodBridge::new(MethodReply::Envelope(envelope.clone()), MethodReply::Valid);
+        assert_eq!(
+            invoke(&mut state, &request_value()),
+            Err(InvokeError::InvalidHostResponse)
+        );
+        assert_eq!(state.calls, ["state.snapshot"]);
+
+        let mut terminal =
+            MethodBridge::new(MethodReply::Valid, MethodReply::Envelope(envelope.clone()));
+        assert_eq!(
+            invoke(&mut terminal, &request_value()),
+            Err(InvokeError::InvalidHostResponse)
+        );
+        assert_eq!(terminal.calls, ["state.snapshot", "terminals.snapshot"]);
+    }
+}
+
+#[test]
+fn terminal_transport_failure_after_successful_state_has_exact_call_order() {
+    let mut bridge = MethodBridge::new(MethodReply::Valid, MethodReply::Valid)
+        .fail_transport("terminals.snapshot", 1);
+    assert_eq!(
+        invoke(&mut bridge, &request_value()),
+        Err(InvokeError::HostCallFailed)
+    );
+    assert_eq!(bridge.calls, ["state.snapshot", "terminals.snapshot"]);
+}
+
+#[test]
+fn cancellation_wins_after_failed_terminal_transport_attempt() {
+    let mut bridge = MethodBridge::new(MethodReply::Valid, MethodReply::Valid)
+        .fail_transport("terminals.snapshot", 1);
+    bridge.cancellation = VecDeque::from([false, false, false, true]);
+    assert_eq!(
+        invoke(&mut bridge, &request_value()),
+        Err(InvokeError::Cancelled)
+    );
+    assert_eq!(bridge.calls, ["state.snapshot", "terminals.snapshot"]);
+}
+
+#[test]
+fn method_sensitive_cancellation_checks_cover_every_call_boundary() {
+    let cases = [
+        (VecDeque::from([true]), 0),
+        (VecDeque::from([false, true]), 1),
+        (VecDeque::from([false, false, true]), 1),
+        (VecDeque::from([false, false, false, true]), 2),
+    ];
+    for (cancellation, expected_calls) in cases {
+        let mut bridge = MethodBridge::new(MethodReply::Valid, MethodReply::Valid);
+        bridge.cancellation = cancellation;
+        assert_eq!(
+            invoke(&mut bridge, &request_value()),
+            Err(InvokeError::Cancelled)
+        );
+        assert_eq!(bridge.calls.len(), expected_calls);
+    }
+}
+
+#[test]
 fn cancellation_and_bridge_failure_never_retry() {
     let mut before = Bridge::new(Reply::Snapshot(mixed_snapshot()));
     before.cancellation = VecDeque::from([true]);
@@ -503,7 +972,7 @@ fn cancellation_and_bridge_failure_never_retry() {
 fn document_validator_rejects_graph_coverage_control_and_dependency_errors() {
     let snapshot = mixed_snapshot();
     let terminals = validate_snapshot(&snapshot).unwrap();
-    let baseline = project(params(), &snapshot).unwrap();
+    let baseline = project_default(params(), &snapshot).unwrap();
 
     let mut unreachable = baseline.clone();
     unreachable.roots.pop();
@@ -644,7 +1113,7 @@ fn duplicate_json_members_are_rejected_on_reachable_paths() {
 
 #[test]
 fn unicode_limits_count_characters_not_utf8_bytes() {
-    let mut document = project(params(), &snapshot(Vec::new())).unwrap();
+    let mut document = project_default(params(), &snapshot(Vec::new())).unwrap();
     document.roots = vec!["unicode".into()];
     document.nodes = vec![DocumentNode::Text {
         id: "unicode".into(),
@@ -704,7 +1173,7 @@ fn u64_extremes_and_every_zero_fence_are_checked_through_service() {
     maximum_snapshot.fingerprint_sha256 = canonical_fingerprint(&maximum_snapshot).unwrap();
     let mut bridge = Bridge::new(Reply::Snapshot(maximum_snapshot));
     assert!(invoke(&mut bridge, &request).is_ok());
-    assert_eq!(bridge.calls.len(), 1);
+    assert_eq!(bridge.calls.len(), 2);
 
     for field in [
         "catalog_generation",
@@ -740,7 +1209,7 @@ fn encoded_limits_are_exact_on_service_and_document_paths() {
     let request_2k = request_with_raw_params(&params_2k);
     let mut bridge = Bridge::new(Reply::Snapshot(snapshot(Vec::new())));
     assert!(service::invoke(&mut bridge, request_2k.as_bytes()).is_ok());
-    assert_eq!(bridge.calls.len(), 1);
+    assert_eq!(bridge.calls.len(), 2);
 
     let params_over = format!("{} {}", &params_2k[..params_2k.len() - 1], "}");
     assert_eq!(params_over.len(), 2049);
@@ -775,7 +1244,7 @@ fn encoded_limits_are_exact_on_service_and_document_paths() {
     let mut over = SizedResultBridge::new(65_537);
     assert_eq!(
         service::invoke(&mut over, &request),
-        Err(InvokeError::InvalidHostResponse)
+        Err(InvokeError::InvalidSnapshot)
     );
 
     let mut document = maximum_encoded_document();
@@ -800,7 +1269,7 @@ fn encoded_limits_are_exact_on_service_and_document_paths() {
 #[test]
 fn document_collection_and_integer_boundaries_are_exact() {
     let allowed = std::collections::BTreeSet::new();
-    let mut document = project(params(), &snapshot(Vec::new())).unwrap();
+    let mut document = project_default(params(), &snapshot(Vec::new())).unwrap();
     document.revision = u64::MAX;
     document.dependencies = (0..64)
         .map(|index| DocumentDependency {

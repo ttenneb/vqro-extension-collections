@@ -3,6 +3,7 @@
 //! Nothing in this module is linked to component runtime behavior. The profile is not a host
 //! contract and grants no state, terminal, document, persistence, or mutation authority.
 
+use crate::policy as production;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -471,6 +472,36 @@ fn strict_decoder_rejects_every_pinned_malformed_case() {
         .invalid_non_policy_keys
         .iter()
         .all(|key| !valid_container_id(key)));
+}
+
+#[test]
+fn independent_and_production_namespace_decoders_cross_check() {
+    let fixture = valid_fixture();
+    let value = encode_value(&fixture.expected_canonical_value).unwrap();
+    let values = BTreeMap::from([
+        (fixture.input.key.clone(), value),
+        (
+            "container_0000000000000000".into(),
+            serde_json::json!({"broken": true}),
+        ),
+        ("unrelated".into(), Value::Null),
+    ]);
+    let independent = decode_namespace(NAMESPACE, &values).unwrap();
+    let runtime = production::decode_namespace(&values).unwrap();
+    assert_eq!(
+        serde_json::to_value(&runtime[&fixture.input.key]).unwrap(),
+        encode_value(&independent[&fixture.input.key]).unwrap()
+    );
+
+    for case in invalid_fixture().cases {
+        let values = BTreeMap::from([(case.key.clone(), case.value)]);
+        assert_eq!(
+            decode_namespace(NAMESPACE, &values).is_err(),
+            production::decode_namespace(&values).is_err(),
+            "decoder disagreement for {}",
+            case.name
+        );
+    }
 }
 
 #[test]
