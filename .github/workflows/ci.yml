@@ -1,0 +1,92 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  clean-cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: source-a
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: source-b
+      - name: Pinned toolchain
+        working-directory: source-a
+        run: rustup show
+      - name: Workspace checks
+        working-directory: source-a
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
+          cargo run --locked -p xtask -- contract-check
+      - name: Two clean distinct-path builds (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/vqro-target-a" "$RUNNER_TEMP/vqro-target-b"
+          (cd source-a && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-a" cargo run --locked -p xtask -- package "$RUNNER_TEMP/a.vqrox")
+          (cd source-b && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-b" cargo run --locked -p xtask -- package "$RUNNER_TEMP/b.vqrox")
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          a = (root / "a.vqrox").read_bytes()
+          b = (root / "b.vqrox").read_bytes()
+          assert a == b, "clean package bytes differ"
+          print(hashlib.sha256(a).hexdigest())
+          PY
+      - name: Two clean distinct-path builds (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $targetA = Join-Path $env:RUNNER_TEMP 'vqro-target-a'
+          $targetB = Join-Path $env:RUNNER_TEMP 'vqro-target-b'
+          $packageA = Join-Path $env:RUNNER_TEMP 'a.vqrox'
+          $packageB = Join-Path $env:RUNNER_TEMP 'b.vqrox'
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $targetA, $targetB
+          Push-Location source-a
+          $env:CARGO_TARGET_DIR = $targetA
+          cargo run --locked -p xtask -- package $packageA
+          if ($LASTEXITCODE -ne 0) { throw 'first package failed' }
+          Pop-Location
+          Push-Location source-b
+          $env:CARGO_TARGET_DIR = $targetB
+          cargo run --locked -p xtask -- package $packageB
+          if ($LASTEXITCODE -ne 0) { throw 'second package failed' }
+          Pop-Location
+          $itemA = Get-Item $packageA
+          $itemB = Get-Item $packageB
+          $hashA = (Get-FileHash -Algorithm SHA256 $packageA).Hash
+          $hashB = (Get-FileHash -Algorithm SHA256 $packageB).Hash
+          if ($itemA.Length -ne $itemB.Length -or $hashA -ne $hashB) {
+            throw 'clean package bytes or hashes differ'
+          }
+          $hashA.ToLowerInvariant()
+      - name: Linux import and authority inspection
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: source-a
+        run: |
+          set -euo pipefail
+          cargo tree --locked --workspace --depth 1
+          PACKAGE_COUNT=$(cargo metadata --locked --format-version 1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))')
+          test "$PACKAGE_COUNT" -le 60
+          if grep -R -E 'crate::extension_|_extension-service|std::process|Command::new|host\.state|focus_terminal' crates vqro-extension.toml; then
+            echo "private host import, forbidden authority, or process spawn detected" >&2
+            exit 1
+          fi

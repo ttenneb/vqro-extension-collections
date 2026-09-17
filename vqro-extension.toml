@@ -1,15 +1,18 @@
-manifest_version = 1
+# Provisional, non-release, read-only structural-shadow candidate. Do not
+# publish before Vqro 0.9.0 or the coordinated authoritative host gate passes.
+manifest_version = 2
+package_contract = "vqro.package.v1"
 id = "vqro.collections"
-name = "vqro Collections"
-version = "1.0.0"
+version = "0.0.0"
 min_vqro_version = "0.9.0"
-description = "Bundled terminal-group navigation provider."
-platforms = ["linux", "macos", "windows"]
+namespaces = ["vqro.collections"]
 
 [[services]]
-id = "document"
-command = ["vqro", "_extension-service", "collections"]
-priority = 100
-document_source = "terminal_groups"
+id = "collections"
 provides = ["host_document"]
-capabilities = ["host_document", "focus_terminal"]
+capabilities = ["host.state.read", "host.terminals.read"]
+
+[services.runtime]
+kind = "component"
+component = "services/collections.wasm"
+world = "vqro:extension/service@1.0.0"

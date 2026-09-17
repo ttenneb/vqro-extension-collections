@@ -1,0 +1,40 @@
+{
+  "source_commit": "36f88d6188c4a1c03fac5f9096595b145a77f308",
+  "source_function": "src/extension_host_terminals.rs::snapshot_fingerprint",
+  "canonical_input_utf8": "{\"contract\":\"host.terminals.v1\",\"workspace_id\":\"w1\",\"tab_id\":\"tab_00000000000000000000000000000001\",\"lease_fence\":{\"catalog_generation\":1,\"package_generation\":2,\"service_generation\":3,\"artifact_generation\":4,\"provider_generation\":5,\"runtime_generation\":6},\"layout\":[{\"kind\":\"tiled\",\"terminal_id\":\"term_00000000000000000000000000000001\"},{\"kind\":\"container\",\"container_id\":\"container_0000000000000001\",\"terminal_ids\":[\"term_00000000000000000000000000000002\"],\"selected_terminal_id\":\"term_00000000000000000000000000000002\"},{\"kind\":\"container\",\"container_id\":\"container_0000000000000002\",\"terminal_ids\":[],\"selected_terminal_id\":null}]}",
+  "fingerprint_sha256": "ed5988fc573adfda94636fb85ab86064ea55dc802db7abb0185edfe5c86b8fa8",
+  "snapshot": {
+    "contract": "host.terminals.v1",
+    "workspace_id": "w1",
+    "tab_id": "tab_00000000000000000000000000000001",
+    "lease_fence": {
+      "catalog_generation": 1,
+      "package_generation": 2,
+      "service_generation": 3,
+      "artifact_generation": 4,
+      "provider_generation": 5,
+      "runtime_generation": 6
+    },
+    "fingerprint_sha256": "ed5988fc573adfda94636fb85ab86064ea55dc802db7abb0185edfe5c86b8fa8",
+    "layout": [
+      {
+        "kind": "tiled",
+        "terminal_id": "term_00000000000000000000000000000001"
+      },
+      {
+        "kind": "container",
+        "container_id": "container_0000000000000001",
+        "terminal_ids": [
+          "term_00000000000000000000000000000002"
+        ],
+        "selected_terminal_id": "term_00000000000000000000000000000002"
+      },
+      {
+        "kind": "container",
+        "container_id": "container_0000000000000002",
+        "terminal_ids": [],
+        "selected_terminal_id": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,154 @@
+{
+  "fixture": "vqro.collections.package-policy-profile.invalid.v1",
+  "status": "package-owned-source-profile-not-host-contract",
+  "cases": [
+    {
+      "name": "reserved-zero-key",
+      "key": "container_0000000000000000",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_0000000000000000",
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "reserved-maximum-key",
+      "key": "container_ffffffffffffffff",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_ffffffffffffffff",
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "key-value-mismatch",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002b",
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "wrong-schema",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "host.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "unknown-version",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 2,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "missing-archive-array",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a"
+      }
+    },
+    {
+      "name": "explicit-null-label",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "label": null,
+        "archived_terminal_ids": []
+      }
+    },
+    {
+      "name": "unknown-field",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [],
+        "members": []
+      }
+    },
+    {
+      "name": "unsorted-archives",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [
+          "term_00000000000000000000000000000002",
+          "term_00000000000000000000000000000001"
+        ]
+      }
+    },
+    {
+      "name": "duplicate-archives",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [
+          "term_00000000000000000000000000000001",
+          "term_00000000000000000000000000000001"
+        ]
+      }
+    },
+    {
+      "name": "uppercase-terminal",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [
+          "term_0000000000000000000000000000000A"
+        ]
+      }
+    },
+    {
+      "name": "short-terminal",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [
+          "term_1"
+        ]
+      }
+    },
+    {
+      "name": "wrong-terminal-identity-family",
+      "key": "container_000000000000002a",
+      "value": {
+        "schema": "vqro.collections.policy",
+        "schema_version": 1,
+        "container_id": "container_000000000000002a",
+        "archived_terminal_ids": [
+          "pane_00000000000000000000000000000001"
+        ]
+      }
+    }
+  ],
+  "invalid_non_policy_keys": [
+    "container_000000000000002A",
+    "container_2a",
+    "collection_000000000000002a"
+  ]
+}
