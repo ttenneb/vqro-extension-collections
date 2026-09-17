@@ -138,7 +138,7 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
         },
     };
     let host_call_bytes =
-        serde_json::to_vec(&host_call).map_err(|_| InvokeError::InvalidRequest)?;
+        canonical_json_bytes(&host_call).map_err(|_| InvokeError::InvalidRequest)?;
     if host_call_bytes.len() > MAX_FRAME_BYTES {
         return Err(InvokeError::InvalidRequest);
     }
@@ -195,7 +195,7 @@ fn decode_response(
     }
     let response: RuntimeHostCallResponse =
         serde_json::from_slice(bytes).map_err(|_| InvokeError::InvalidHostResponse)?;
-    if response.r#type != "host_call_response"
+    if response.r#type != "host_response"
         || response.call_id != expected_call_id
         || response.identity != *expected_identity
     {
@@ -219,11 +219,36 @@ fn decode_response(
 }
 
 fn encode_document(document: &HostDocument) -> Result<Vec<u8>, InvokeError> {
-    let bytes = serde_json::to_vec(document).map_err(|_| InvokeError::InvalidDocument)?;
+    let bytes = canonical_json_bytes(document).map_err(|_| InvokeError::InvalidDocument)?;
     if bytes.len() > MAX_DOCUMENT_BYTES {
         return Err(InvokeError::InvalidDocument);
     }
     Ok(bytes)
+}
+
+// This must remain byte-for-byte equivalent to the host component boundary's
+// `extension_runtime::component::canonical_json_bytes` implementation.
+fn canonical_json_bytes(value: &impl Serialize) -> Result<Vec<u8>, serde_json::Error> {
+    fn sort(value: serde_json::Value) -> serde_json::Value {
+        match value {
+            serde_json::Value::Object(object) => {
+                let mut entries = object.into_iter().collect::<Vec<_>>();
+                entries.sort_by(|left, right| left.0.cmp(&right.0));
+                serde_json::Value::Object(
+                    entries
+                        .into_iter()
+                        .map(|(key, value)| (key, sort(value)))
+                        .collect(),
+                )
+            }
+            serde_json::Value::Array(values) => {
+                serde_json::Value::Array(values.into_iter().map(sort).collect())
+            }
+            value => value,
+        }
+    }
+
+    serde_json::to_vec(&sort(serde_json::to_value(value)?))
 }
 
 fn call_id(request: &[u8]) -> String {

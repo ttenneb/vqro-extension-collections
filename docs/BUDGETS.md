@@ -21,7 +21,11 @@ IDs, complete reachability, acyclicity, single-parent ownership, bounded depth,
 unique terminal slots, and exact terminal coverage. Control characters are
 rejected. Snapshot validation enforces canonical IDs, nonzero lease fences,
 container selection integrity, global identity uniqueness, topology bounds,
-and the recomputed canonical fingerprint.
+and the recomputed canonical fingerprint. Host-call responses require the exact
+`type: "host_response"` discriminator. Host-call requests and final document
+results crossing WIT use compact JSON with recursively lexicographically sorted
+object keys and order-preserving arrays, matching the host component boundary.
+The terminal fingerprint input remains compact struct-order JSON by contract.
 
 ## Package and component
 

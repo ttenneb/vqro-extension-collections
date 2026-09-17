@@ -30,8 +30,11 @@ successor preserving the copied public contracts).
 3. **Read-only call:** for a valid host-authored render request, record exactly
    one depth-1 call with copied outer identity, namespace `vqro.collections`,
    capability `host.terminals.read`, method `terminals.snapshot`, and params
-   `{ "contract": "host.terminals.v1" }`. No state call, mutation, action,
-   effect, focus, log, or second call is permitted.
+   `{ "contract": "host.terminals.v1" }`. Require byte-exact compact JSON with
+   recursively lexicographically sorted object keys and preserved array order
+   for this call and the final document returned across WIT. The terminal
+   fingerprint vector remains compact struct-order JSON. No state call,
+   mutation, action, effect, focus, log, or second call is permitted.
 4. **Projection:** exercise mixed tiled/container topology, empty containers,
    selection, empty and maximum snapshots. Require one normative terminal
    dependency, top-level producer/scope/revision echo, stable local node IDs,
@@ -40,6 +43,7 @@ successor preserving the copied public contracts).
    effect field appears.
 5. **Rejection:** cover every outer identity/contract/fence mismatch, unknown
    field, malformed response envelope, host error, malformed snapshot,
+   legacy `host_call_response` and arbitrary response discriminators,
    fingerprint mismatch, duplicate/missing terminal, invalid selection,
    topology/document/text/encoded bound, graph, and dependency error. Invalid
    requests and pre-call cancellation make zero calls; all post-admission paths

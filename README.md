@@ -10,6 +10,13 @@ performs exactly one depth-1 `terminals.snapshot` call through the public
 `vqro:extension/host@1.0.0` interface, validates the complete accepted envelope
 and `host.terminals.v1` snapshot (including the recomputed canonical SHA-256
 fingerprint), and returns a deterministic `host.document.v2` structural shadow.
+The host response decoder requires the exact `RuntimeHostCallResponseV1`
+discriminator `type: "host_response"`; legacy or arbitrary spellings are
+rejected. Both outbound WIT-boundary payloads—the `RuntimeHostCallV1` request
+and final document—use compact JSON with object keys recursively sorted
+lexicographically; array order
+is preserved. The terminal fingerprint input deliberately remains compact JSON
+in its normative struct field order and is not passed through that serializer.
 Tiled terminals become terminal-slot roots. Containers become ordered group
 roots, including empty containers. Accessibility strings are local static text;
 no host labels, archive data, pane IDs, geometry, selection, actions, or effects

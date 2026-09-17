@@ -1,6 +1,7 @@
 use crate::projection::*;
 use crate::service::{self, HostBridge, InvokeError};
 use serde_json::{json, Value};
+use sha2::Digest;
 use std::collections::VecDeque;
 
 const TERM1: &str = "term_00000000000000000000000000000001";
@@ -77,6 +78,7 @@ struct Bridge {
     reply: Reply,
     cancellation: VecDeque<bool>,
     calls: Vec<Value>,
+    call_bytes: Vec<Vec<u8>>,
 }
 
 impl Bridge {
@@ -85,6 +87,7 @@ impl Bridge {
             reply,
             cancellation: VecDeque::from([false, false]),
             calls: Vec::new(),
+            call_bytes: Vec::new(),
         }
     }
 }
@@ -98,10 +101,11 @@ impl HostBridge for Bridge {
 
     fn call(&mut self, request: &[u8]) -> Result<Vec<u8>, Self::Error> {
         let call: Value = serde_json::from_slice(request).unwrap();
+        self.call_bytes.push(request.to_vec());
         self.calls.push(call.clone());
         match &self.reply {
             Reply::Snapshot(snapshot) => Ok(serde_json::to_vec(&json!({
-                "type": "host_call_response",
+                "type": "host_response",
                 "call_id": call["call_id"],
                 "identity": call["identity"],
                 "result": snapshot
@@ -121,7 +125,7 @@ impl HostBridge for Bridge {
                 let identity = serde_json::to_string(&call["identity"]).unwrap();
                 let call_id = serde_json::to_string(&call["call_id"]).unwrap();
                 Ok(format!(
-                    "{{\"type\":\"host_call_response\",\"call_id\":{call_id},\"identity\":{identity},\"result\":{{\"contract\":\"host.terminals.v1\",\"contract\":\"host.terminals.v1\"}}}}"
+                    "{{\"type\":\"host_response\",\"call_id\":{call_id},\"identity\":{identity},\"result\":{{\"contract\":\"host.terminals.v1\",\"contract\":\"host.terminals.v1\"}}}}"
                 ).into_bytes())
             }
             Reply::Fail => Err(()),
@@ -239,6 +243,34 @@ fn service_uses_one_exact_read_call_and_emits_no_forbidden_fields() {
 }
 
 #[test]
+fn wit_boundary_bytes_use_recursive_canonical_object_order() {
+    let request = request_value();
+    let request_bytes = serde_json::to_vec(&request).unwrap();
+    let call_id = format!("collections-{:x}", sha2::Sha256::digest(&request_bytes));
+    let snapshot = mixed_snapshot();
+    let fingerprint = snapshot.fingerprint_sha256.clone();
+    let mut bridge = Bridge::new(Reply::Snapshot(snapshot));
+
+    let document_bytes = service::invoke(&mut bridge, &request_bytes).unwrap();
+
+    assert_eq!(
+        bridge.call_bytes[0],
+        format!(
+            "{{\"call_id\":\"{call_id}\",\"capability\":\"host.terminals.read\",\"depth\":1,\"identity\":{{\"generation\":9,\"namespace\":\"vqro.collections\",\"package_id\":\"vqro.collections\",\"service_id\":\"collections\"}},\"method\":\"terminals.snapshot\",\"namespace\":\"vqro.collections\",\"params\":{{\"contract\":\"host.terminals.v1\"}},\"type\":\"host_call\"}}"
+        )
+        .into_bytes()
+    );
+    assert_eq!(
+        document_bytes,
+        format!(
+            "{{\"contract\":\"host.document.v2\",\"dependencies\":[{{\"contract\":\"host.terminals.v1\",\"generation\":5,\"revision\":1,\"scope_id\":\"{TAB}/{fingerprint}\"}}],\"nodes\":[{{\"accessibility\":{{\"name\":\"Terminal\"}},\"id\":\"node-000\",\"kind\":\"terminal_slot\",\"terminal_id\":\"{TERM1}\"}},{{\"accessibility\":{{\"name\":\"Terminal group\"}},\"children\":[\"node-002\"],\"id\":\"node-001\",\"kind\":\"group\"}},{{\"accessibility\":{{\"name\":\"Terminal\"}},\"id\":\"node-002\",\"kind\":\"terminal_slot\",\"terminal_id\":\"{TERM2}\"}},{{\"accessibility\":{{\"name\":\"Terminal group\"}},\"children\":[],\"id\":\"node-003\",\"kind\":\"group\"}}],\"producer\":{{\"artifact_sha256\":\"{}\",\"package_id\":\"vqro.collections\",\"provider_generation\":10,\"runtime_generation\":9,\"scope_generation\":11,\"service_id\":\"collections\"}},\"revision\":12,\"roots\":[\"node-000\",\"node-001\",\"node-003\"],\"scope\":{{\"contract\":\"host.collection.v1\",\"scope_id\":\"shadow/current\"}}}}",
+            "a".repeat(64)
+        )
+        .into_bytes()
+    );
+}
+
+#[test]
 fn all_outer_identity_contract_and_fence_errors_make_zero_calls() {
     let cases = [
         ("contract", json!("wrong")),
@@ -291,12 +323,13 @@ fn unknown_request_and_params_fields_are_rejected_without_call() {
 fn envelope_contract_identity_and_shape_errors_stop_after_one_call() {
     let good_identity = "$identity";
     let cases = vec![
+        json!({"type":"host_call_response","call_id":"$call","identity":good_identity,"result":mixed_snapshot()}),
         json!({"type":"wrong","call_id":"$call","identity":good_identity,"result":mixed_snapshot()}),
-        json!({"type":"host_call_response","call_id":"wrong","identity":good_identity,"result":mixed_snapshot()}),
-        json!({"type":"host_call_response","call_id":"$call","identity":{"package_id":"vqro.collections","namespace":"vqro.collections","service_id":"collections","generation":8},"result":mixed_snapshot()}),
-        json!({"type":"host_call_response","call_id":"$call","identity":good_identity}),
-        json!({"type":"host_call_response","call_id":"$call","identity":good_identity,"result":mixed_snapshot(),"error":{"code":"x","message":"secret"}}),
-        json!({"type":"host_call_response","call_id":"$call","identity":good_identity,"result":mixed_snapshot(),"unknown":true}),
+        json!({"type":"host_response","call_id":"wrong","identity":good_identity,"result":mixed_snapshot()}),
+        json!({"type":"host_response","call_id":"$call","identity":{"package_id":"vqro.collections","namespace":"vqro.collections","service_id":"collections","generation":8},"result":mixed_snapshot()}),
+        json!({"type":"host_response","call_id":"$call","identity":good_identity}),
+        json!({"type":"host_response","call_id":"$call","identity":good_identity,"result":mixed_snapshot(),"error":{"code":"x","message":"secret"}}),
+        json!({"type":"host_response","call_id":"$call","identity":good_identity,"result":mixed_snapshot(),"unknown":true}),
     ];
     for envelope in cases {
         let mut bridge = Bridge::new(Reply::Envelope(envelope));
@@ -311,7 +344,7 @@ fn envelope_contract_identity_and_shape_errors_stop_after_one_call() {
 #[test]
 fn accepted_host_error_is_static_and_not_leaked() {
     let envelope = json!({
-        "type":"host_call_response", "call_id":"$call", "identity":"$identity",
+        "type":"host_response", "call_id":"$call", "identity":"$identity",
         "error":{"code":"host_secret_code","message":"payload secret"}
     });
     let mut bridge = Bridge::new(Reply::Envelope(envelope));
@@ -355,7 +388,8 @@ fn snapshot_contract_unknown_fingerprint_and_topology_errors_are_rejected() {
 
     let mut value = serde_json::to_value(mixed_snapshot()).unwrap();
     value["unknown"] = json!(true);
-    let envelope = json!({"type":"host_call_response","call_id":"$call","identity":"$identity","result":value});
+    let envelope =
+        json!({"type":"host_response","call_id":"$call","identity":"$identity","result":value});
     let mut bridge = Bridge::new(Reply::Envelope(envelope));
     assert_eq!(
         invoke(&mut bridge, &request_value()),
@@ -936,7 +970,7 @@ impl HostBridge for SizedResultBridge {
         let result = format!("\"{}\"", "x".repeat(self.target - 2));
         assert_eq!(result.len(), self.target);
         Ok(format!(
-            "{{\"type\":\"host_call_response\",\"call_id\":{},\"identity\":{},\"result\":{result}}}",
+            "{{\"type\":\"host_response\",\"call_id\":{},\"identity\":{},\"result\":{result}}}",
             serde_json::to_string(&call["call_id"]).unwrap(),
             serde_json::to_string(&call["identity"]).unwrap()
         )
