@@ -9,8 +9,9 @@ contract and grants no state, terminal, document, migration, persistence,
 activation, or mutation authority.
 
 The profile is deliberately excluded from the `.vqrox`. The current component
-never reads generic state and remains wired only to its existing terminal
-structural-shadow path. See [`collections-policy-v1.md`](collections-policy-v1.md)
+uses the equivalent package-owned production decoder for a read-only generic
+state snapshot followed by the terminal snapshot; the profile remains
+source-only test and documentation material, not packaged runtime input. See [`collections-policy-v1.md`](collections-policy-v1.md)
 for the normative package-owned rules and [`collections-policy-v1.schema.json`](collections-policy-v1.schema.json)
 for the structural value schema.
 

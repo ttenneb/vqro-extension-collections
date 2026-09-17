@@ -1,5 +1,6 @@
-//! External, read-only structural shadow for Vqro terminal topology.
+//! External, read-only Collections semantic shadow over public host snapshots.
 
+pub mod policy;
 pub mod projection;
 pub mod service;
 

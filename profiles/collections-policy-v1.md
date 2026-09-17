@@ -101,8 +101,11 @@ vector only; it is not a host document dependency or freshness claim.
 
 ## Malformed behavior
 
-Invalid key/value identity, unknown fields, missing fields, explicit null label,
-wrong schema/version, invalid identities, excessive bounds, noncanonical archive
-order, duplicates, and key/value mismatch reject the complete supplied policy
-projection. Unknown future versions fail closed. No malformed canonical record
-falls back to unlabelled/unarchived behavior.
+At a canonical valid container key, invalid value identity, unknown or missing
+fields, explicit null label, wrong schema/version, invalid terminal identities,
+excessive bounds, noncanonical archive order, duplicates, and key/value mismatch
+reject the complete supplied policy projection. Reserved or otherwise
+noncanonical container-looking keys are unrelated values and are ignored,
+regardless of their value shape. Unknown future versions at canonical keys fail
+closed. No malformed canonical record falls back to unlabelled/unarchived
+behavior.

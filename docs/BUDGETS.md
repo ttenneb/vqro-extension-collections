@@ -8,9 +8,11 @@ rejection limits, not truncation targets.
 - runtime request frame: 256 KiB;
 - render parameters: 2 KiB;
 - request/call and opaque document identifiers: 128 bytes;
-- terminal snapshot response envelope: 64 KiB;
+- host response envelope: 256 KiB; state snapshot raw result: 192 KiB;
+  terminal snapshot raw result: 64 KiB;
 - layout items: 64; terminals: 32; containers: 32; members/container: 64;
-- exactly one attempted host call, at depth 1, with one outstanding call;
+- exactly two sequential attempted host calls, each at depth 1, with one
+  outstanding call;
 - document encoding: 128 KiB;
 - nodes/roots/group children: 512; dependencies: 64; graph depth: 16;
 - text: 4,096 characters/field; accessibility name: 256;
@@ -18,8 +20,8 @@ rejection limits, not truncation targets.
 
 The pure document validator also enforces strict dependency ordering, unique
 IDs, complete reachability, acyclicity, single-parent ownership, bounded depth,
-unique terminal slots, and exact terminal coverage. Control characters are
-rejected. Snapshot validation enforces canonical IDs, nonzero lease fences,
+unique terminal slots, exact terminal coverage, and exactly two sorted normative
+dependencies. Control characters are rejected. Snapshot validation enforces canonical IDs, nonzero lease fences,
 container selection integrity, global identity uniqueness, topology bounds,
 and the recomputed canonical fingerprint. Host-call responses require the exact
 `type: "host_response"` discriminator. Host-call requests and final document

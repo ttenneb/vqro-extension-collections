@@ -3,8 +3,8 @@
 This is a host-side follow-up specification only. This repository must not
 modify or import the Vqro repository. The candidate remains provisional and
 unpublished until an authoritative gate passes against Vqro integrated commit
-`36f88d6188c4a1c03fac5f9096595b145a77f308` (or an explicitly reviewed
-successor preserving the copied public contracts).
+`976bb81c66354e36625c7b189f7212b6917ea2ec` (or an explicitly reviewed
+successor preserving the copied public contracts and composite staged gate).
 
 ## Fixture
 
@@ -21,33 +21,32 @@ successor preserving the copied public contracts).
 1. **Package:** validation accepts ID/namespace `vqro.collections`, version
    `0.0.0`, service `collections`, component world
    `vqro:extension/service@1.0.0`, provides exactly `host_document`, and grants
-   exactly `host.terminals.read`. Ordinary local-file provenance still rejects
+   exactly `host.state.read` and `host.terminals.read`. Ordinary local-file provenance still rejects
    the reserved `vqro.*` claim; test-only curated provenance binds the exact
    repository, commit, package, and manifest digests.
 2. **Runtime surface:** descriptor is exactly service `collections`, methods
    `["host.document.render"]`. Instantiation needs no WASI, filesystem,
    network, environment, clock, random, process, or executable lookup.
-3. **Read-only call:** for a valid host-authored render request, record exactly
-   one depth-1 call with copied outer identity, namespace `vqro.collections`,
-   capability `host.terminals.read`, method `terminals.snapshot`, and params
-   `{ "contract": "host.terminals.v1" }`. Require byte-exact compact JSON with
-   recursively lexicographically sorted object keys and preserved array order
-   for this call and the final document returned across WIT. The terminal
-   fingerprint vector remains compact struct-order JSON. No state call,
-   mutation, action, effect, focus, log, or second call is permitted.
+3. **Read-only calls:** for a valid host-authored render request, record exactly
+   one depth-1 `state.snapshot` call with capability `host.state.read` and params
+   `{ "contract": "host.state.v1" }`, followed by exactly one depth-1
+   `terminals.snapshot` call with capability `host.terminals.read` and params
+   `{ "contract": "host.terminals.v1" }`. Both copy identity and namespace.
+   Require byte-exact canonical JSON. No retry, write, action, effect, focus, or
+   log call is permitted.
 4. **Projection:** exercise mixed tiled/container topology, empty containers,
-   selection, empty and maximum snapshots. Require one normative terminal
-   dependency, top-level producer/scope/revision echo, stable local node IDs,
+   selection, empty and maximum snapshots. Reconcile only package label/archive
+   policy while preserving terminal topology. Require sorted normative state and terminal
+   dependencies, top-level producer/scope/revision echo, stable local node IDs,
    preserved ordering, exact terminal coverage, and byte-identical repeated
-   output. Assert no label, archive, pane, geometry, selection, action, or
-   effect field appears.
+   output. Assert no pane, geometry, selection, action, or effect field appears.
 5. **Rejection:** cover every outer identity/contract/fence mismatch, unknown
    field, malformed response envelope, host error, malformed snapshot,
    legacy `host_call_response` and arbitrary response discriminators,
    fingerprint mismatch, duplicate/missing terminal, invalid selection,
    topology/document/text/encoded bound, graph, and dependency error. Invalid
    requests and pre-call cancellation make zero calls; all post-admission paths
-   make at most one. Post-call cancellation wins over success or host error.
+   make at most two, with failures stopping the sequence. Post-call cancellation wins.
    Returned service errors are static and contain no payload text.
 6. **Artifact binding and mutation rejection:** mutate the archive, manifest,
    copied contract, or extracted component and require rejection before

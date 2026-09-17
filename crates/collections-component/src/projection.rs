@@ -1,10 +1,13 @@
 //! Pure, authority-free terminal snapshot validation and document projection.
 
+use crate::policy::{archived, validate_neutral, PolicyRecord};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const MAX_SNAPSHOT_BYTES: usize = 65_536;
+pub const MAX_STATE_SNAPSHOT_BYTES: usize = 196_608;
 pub const MAX_DOCUMENT_BYTES: usize = 131_072;
 const MAX_LAYOUT_ITEMS: usize = 64;
 const MAX_TERMINALS: usize = 32;
@@ -75,6 +78,18 @@ pub struct TerminalSnapshot {
     pub lease_fence: LeaseFence,
     pub fingerprint_sha256: String,
     pub layout: Vec<LayoutItem>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateSnapshot {
+    pub contract: String,
+    pub store_id: String,
+    pub store_generation: u64,
+    pub namespace: String,
+    pub revision: u64,
+    pub sequence: u64,
+    pub values: BTreeMap<String, Value>,
 }
 
 #[derive(Serialize)]
@@ -243,17 +258,23 @@ pub fn validate_snapshot(snapshot: &TerminalSnapshot) -> Result<BTreeSet<String>
 
 pub fn project(
     params: RenderParams,
+    state: &StateSnapshot,
+    policies: &BTreeMap<String, PolicyRecord>,
     snapshot: &TerminalSnapshot,
 ) -> Result<HostDocument, ProjectionError> {
     let terminals = validate_snapshot(snapshot)?;
-    let dependency = DocumentDependency {
-        contract: "host.terminals.v1".into(),
-        scope_id: format!("{}/{}", snapshot.tab_id, snapshot.fingerprint_sha256),
-        revision: 1,
-        generation: snapshot.lease_fence.provider_generation,
-    };
+    let mut dependencies = vec![
+        state_snapshot_dependency(state)?,
+        DocumentDependency {
+            contract: "host.terminals.v1".into(),
+            scope_id: format!("{}/{}", snapshot.tab_id, snapshot.fingerprint_sha256),
+            revision: 1,
+            generation: snapshot.lease_fence.provider_generation,
+        },
+    ];
+    dependencies.sort();
     let mut roots = Vec::with_capacity(snapshot.layout.len());
-    let mut nodes = Vec::with_capacity(snapshot.layout.len() + terminals.len());
+    let mut nodes = Vec::with_capacity(snapshot.layout.len() + terminals.len() * 2);
     let mut next = 0_usize;
     for item in &snapshot.layout {
         match item {
@@ -261,27 +282,45 @@ pub fn project(
                 let id = node_id(next);
                 next += 1;
                 roots.push(id.clone());
-                nodes.push(slot(id, terminal_id.clone()));
+                nodes.push(slot(id, terminal_id.clone(), false));
             }
-            LayoutItem::Container { terminal_ids, .. } => {
+            LayoutItem::Container {
+                container_id,
+                terminal_ids,
+                ..
+            } => {
+                validate_neutral(terminal_ids).map_err(|_| ProjectionError::DocumentInvalid)?;
+                let policy = policies.get(container_id);
                 let group_id = node_id(next);
                 next += 1;
                 roots.push(group_id.clone());
-                let mut children = Vec::with_capacity(terminal_ids.len());
-                for terminal_id in terminal_ids {
+                let mut children = Vec::new();
+                let insert_at = nodes.len();
+                if let Some(label) = policy.and_then(|record| record.label.as_ref()) {
                     let id = node_id(next);
                     next += 1;
                     children.push(id.clone());
-                    nodes.push(slot(id, terminal_id.clone()));
+                    nodes.push(DocumentNode::Text {
+                        id,
+                        accessibility: accessibility("Collection label"),
+                        text: label.clone(),
+                    });
                 }
-                // Keep pre-order node order while deriving child IDs without host labels.
-                let group = DocumentNode::Group {
-                    id: group_id,
-                    accessibility: accessibility("Terminal group"),
-                    children,
-                };
-                let insert_at = nodes.len() - terminal_ids.len();
-                nodes.insert(insert_at, group);
+                for terminal_id in terminal_ids {
+                    let is_archived = archived(policy, terminal_id);
+                    let id = node_id(next);
+                    next += 1;
+                    children.push(id.clone());
+                    nodes.push(slot(id, terminal_id.clone(), is_archived));
+                }
+                nodes.insert(
+                    insert_at,
+                    DocumentNode::Group {
+                        id: group_id,
+                        accessibility: accessibility("Collection"),
+                        children,
+                    },
+                );
             }
         }
     }
@@ -290,7 +329,7 @@ pub fn project(
         producer: params.producer,
         scope: params.scope,
         revision: params.requested_revision,
-        dependencies: vec![dependency],
+        dependencies,
         roots,
         nodes,
     };
@@ -412,10 +451,14 @@ fn walk<'a>(
     Ok(())
 }
 
-fn slot(id: String, terminal_id: String) -> DocumentNode {
+fn slot(id: String, terminal_id: String, archived: bool) -> DocumentNode {
     DocumentNode::TerminalSlot {
         id,
-        accessibility: accessibility("Terminal"),
+        accessibility: accessibility(if archived {
+            "Archived terminal"
+        } else {
+            "Terminal"
+        }),
         terminal_id,
     }
 }
@@ -425,6 +468,27 @@ fn accessibility(name: &str) -> Accessibility {
         name: name.into(),
         description: None,
     }
+}
+
+pub(crate) fn state_snapshot_dependency(
+    state: &StateSnapshot,
+) -> Result<DocumentDependency, ProjectionError> {
+    let revision = state
+        .revision
+        .checked_add(1)
+        .ok_or(ProjectionError::DocumentInvalid)?;
+    let mut digest = Sha256::new();
+    digest.update(b"vqro.host.state.document-dependency.v1\0");
+    for value in [&state.store_id, &state.namespace] {
+        digest.update((value.len() as u64).to_be_bytes());
+        digest.update(value.as_bytes());
+    }
+    Ok(DocumentDependency {
+        contract: "host.state.v1".into(),
+        scope_id: format!("state_{:x}", digest.finalize()),
+        revision,
+        generation: state.store_generation,
+    })
 }
 
 fn node_id(index: usize) -> String {
