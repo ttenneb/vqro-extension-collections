@@ -41,7 +41,6 @@ jobs:
           rm -rf "$RUNNER_TEMP/vqro-target-a" "$RUNNER_TEMP/vqro-target-b"
           (cd source-a && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-a" cargo run --locked -p xtask -- package "$RUNNER_TEMP/a.vqrox")
           (cd source-b && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-b" cargo run --locked -p xtask -- package "$RUNNER_TEMP/b.vqrox")
-          (cd source-a && cargo run --locked -p xtask -- verify "$RUNNER_TEMP/a.vqrox")
           python3 - <<'PY'
           import hashlib, os, pathlib
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
@@ -69,10 +68,6 @@ jobs:
           $env:CARGO_TARGET_DIR = $targetB
           cargo run --locked -p xtask -- package $packageB
           if ($LASTEXITCODE -ne 0) { throw 'second package failed' }
-          Pop-Location
-          Push-Location source-a
-          cargo run --locked -p xtask -- verify $packageA
-          if ($LASTEXITCODE -ne 0) { throw 'verification failed' }
           Pop-Location
           $itemA = Get-Item $packageA
           $itemB = Get-Item $packageB

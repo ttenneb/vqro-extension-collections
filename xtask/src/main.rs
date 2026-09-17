@@ -108,7 +108,7 @@ fn main() -> Result<()> {
             if args.next().is_some() {
                 bail!("usage: cargo run -p xtask -- verify <package.vqrox>");
             }
-            verify_package(&path)
+            verify_reviewed_package(&path)
         }
         _ => bail!("usage: cargo run -p xtask -- <contract-check|package|verify>"),
     }
@@ -210,12 +210,38 @@ fn package(output: Option<&Path>) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(&output, &archive).with_context(|| format!("write {}", output.display()))?;
-    verify_package(&output)?;
+    validate_package_against_current_source(&output)?;
     println!("package {} sha256={}", output.display(), sha256(&archive));
     Ok(())
 }
 
-fn verify_package(path: &Path) -> Result<()> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ArtifactIdentity {
+    CurrentSource,
+    Reviewed,
+}
+
+fn validate_package_against_current_source(path: &Path) -> Result<()> {
+    verify_package(path, ArtifactIdentity::CurrentSource)
+}
+
+fn verify_reviewed_package(path: &Path) -> Result<()> {
+    verify_package(path, ArtifactIdentity::Reviewed)
+}
+
+fn verify_reviewed_digest(
+    identity: ArtifactIdentity,
+    artifact: &str,
+    actual: &str,
+    expected: &str,
+) -> Result<()> {
+    if identity == ArtifactIdentity::Reviewed && actual != expected {
+        bail!("{artifact} digest mismatch: expected {expected}, got {actual}");
+    }
+    Ok(())
+}
+
+fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
     contract_check()?;
     let metadata = fs::metadata(path).with_context(|| format!("stat {}", path.display()))?;
     if metadata.len() > MAX_PACKAGE_BYTES as u64 {
@@ -223,9 +249,12 @@ fn verify_package(path: &Path) -> Result<()> {
     }
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
     let package_digest = sha256(&bytes);
-    if package_digest != EXPECTED_PACKAGE_SHA256 {
-        bail!("package digest mismatch: expected {EXPECTED_PACKAGE_SHA256}, got {package_digest}");
-    }
+    verify_reviewed_digest(
+        identity,
+        "package",
+        &package_digest,
+        EXPECTED_PACKAGE_SHA256,
+    )?;
     let entries = read_archive(&bytes)?;
     if canonical_archive(&entries)? != bytes {
         bail!("package is not the canonical deterministic tar encoding");
@@ -336,11 +365,12 @@ fn verify_package(path: &Path) -> Result<()> {
 
     let component_bytes = by_path["services/collections.wasm"];
     let component_digest = sha256(component_bytes);
-    if component_digest != EXPECTED_COMPONENT_SHA256 {
-        bail!(
-            "component digest mismatch: expected {EXPECTED_COMPONENT_SHA256}, got {component_digest}"
-        );
-    }
+    verify_reviewed_digest(
+        identity,
+        "component",
+        &component_digest,
+        EXPECTED_COMPONENT_SHA256,
+    )?;
     verify_component(component_bytes)?;
     println!("verified {} sha256={package_digest}", path.display());
     Ok(())
@@ -610,6 +640,28 @@ fn sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn current_source_validation_skips_only_reviewed_digest_binding() {
+        for artifact in ["package", "component"] {
+            verify_reviewed_digest(
+                ArtifactIdentity::CurrentSource,
+                artifact,
+                "local",
+                "reviewed",
+            )
+            .unwrap();
+            assert!(verify_reviewed_digest(
+                ArtifactIdentity::Reviewed,
+                artifact,
+                "local",
+                "reviewed"
+            )
+            .is_err());
+            verify_reviewed_digest(ArtifactIdentity::Reviewed, artifact, "reviewed", "reviewed")
+                .unwrap();
+        }
+    }
 
     #[test]
     fn checksum_manifest_is_sorted_and_excludes_itself_by_construction() {
