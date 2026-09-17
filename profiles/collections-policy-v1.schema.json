@@ -1,0 +1,48 @@
+{
+  "$id": "urn:vqro-extension-collections:profile:collections-policy:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Package-owned-source-profile-not-host-contract value schema. Semantic key binding, UTF-8 byte limits, canonical ordering, and namespace bounds require the package validator.",
+  "properties": {
+    "archived_terminal_ids": {
+      "items": {
+        "pattern": "^term_[0-9a-f]{32}$",
+        "type": "string"
+      },
+      "maxItems": 64,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "container_id": {
+      "not": {
+        "enum": [
+          "container_0000000000000000",
+          "container_ffffffffffffffff"
+        ]
+      },
+      "pattern": "^container_[0-9a-f]{16}$",
+      "type": "string"
+    },
+    "label": {
+      "maxLength": 4096,
+      "type": "string"
+    },
+    "schema": {
+      "const": "vqro.collections.policy",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "schema_version",
+    "container_id",
+    "archived_terminal_ids"
+  ],
+  "title": "vqro.collections package-owned policy value v1",
+  "type": "object",
+  "x-status": "package-owned-source-profile-not-host-contract"
+}

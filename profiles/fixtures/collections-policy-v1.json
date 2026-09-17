@@ -1,0 +1,75 @@
+{
+  "fixture": "vqro.collections.package-policy-profile.v1",
+  "status": "package-owned-source-profile-not-host-contract",
+  "namespace": "vqro.collections",
+  "policy_fields": [
+    "label",
+    "archive"
+  ],
+  "input": {
+    "key": "container_000000000000002a",
+    "label": "Helpers",
+    "archived_terminal_ids": [
+      "term_00000000000000000000000000000063",
+      "term_00000000000000000000000000000002",
+      "term_00000000000000000000000000000001"
+    ]
+  },
+  "expected_canonical_value": {
+    "archived_terminal_ids": [
+      "term_00000000000000000000000000000001",
+      "term_00000000000000000000000000000002",
+      "term_00000000000000000000000000000063"
+    ],
+    "container_id": "container_000000000000002a",
+    "label": "Helpers",
+    "schema": "vqro.collections.policy",
+    "schema_version": 1
+  },
+  "expected_canonical_compact_json": "{\"archived_terminal_ids\":[\"term_00000000000000000000000000000001\",\"term_00000000000000000000000000000002\",\"term_00000000000000000000000000000063\"],\"container_id\":\"container_000000000000002a\",\"label\":\"Helpers\",\"schema\":\"vqro.collections.policy\",\"schema_version\":1}",
+  "expected_canonical_sha256": "7e058b1d832c125e3c47c1f2e47fe8405476889054d6ba0ac49d643378a4f03e",
+  "externally_supplied_neutral_order": [
+    "term_00000000000000000000000000000002",
+    "term_00000000000000000000000000000001",
+    "term_00000000000000000000000000000003"
+  ],
+  "expected_projection": {
+    "label": "Helpers",
+    "terminals": [
+      {
+        "terminal_id": "term_00000000000000000000000000000002",
+        "archived": true
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000001",
+        "archived": true
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000003",
+        "archived": false
+      }
+    ]
+  },
+  "expected_stale_archive_retention": [
+    "term_00000000000000000000000000000063"
+  ],
+  "expected_membership_archive_sha256": "1917f27428bf1f169b53a44b995716187d96d36a6852a9169728a2fbca8dc591",
+  "expected_missing_record_projection": {
+    "label": null,
+    "terminals": [
+      {
+        "terminal_id": "term_00000000000000000000000000000002",
+        "archived": false
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000001",
+        "archived": false
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000003",
+        "archived": false
+      }
+    ]
+  },
+  "expected_missing_record_fingerprint_sha256": "eebc45e0a90bd67c532cd41afc045701a34bb8895d334bcbf27d717f9df400b0"
+}
