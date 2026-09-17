@@ -58,6 +58,33 @@ const CONTRACT_FILES: [(&str, &str); 12] = [
         "96aca18d936ea2ad44361d6eccd4fa9d331711bed1f75349fdf21b99606231f2",
     ),
 ];
+#[cfg(test)]
+const SOURCE_ONLY_PROFILE_FILES: [&str; 5] = [
+    "profiles/README.md",
+    "profiles/collections-policy-v1.md",
+    "profiles/collections-policy-v1.schema.json",
+    "profiles/fixtures/collections-policy-v1-invalid.json",
+    "profiles/fixtures/collections-policy-v1.json",
+];
+const EXPECTED_PACKAGE_PATHS: [&str; 17] = [
+    "LICENSE",
+    "README.md",
+    "checksums.sha256",
+    "contracts/PROVENANCE.md",
+    "contracts/api/host-document-render-v2.schema.json",
+    "contracts/api/host-document-v2.md",
+    "contracts/api/host-document-v2.schema.json",
+    "contracts/api/host-terminals-v1.schema.json",
+    "contracts/api/vqro-service-v1.schema.json",
+    "contracts/fixtures/host-document-v2/invalid-action.json",
+    "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
+    "contracts/fixtures/host-document-v2/invalid-unreachable.json",
+    "contracts/fixtures/host-document-v2/valid.json",
+    "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
+    "contracts/vqro-extension-service/world.wit",
+    "services/collections.wasm",
+    "vqro-extension.toml",
+];
 const EXPECTED_PACKAGE_SHA256: &str =
     "42745bb5af54b0dced06cf0e92e8c95383e42641c105f6256249ede67af2c634";
 const EXPECTED_MANIFEST_SHA256: &str =
@@ -264,26 +291,7 @@ fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
         .iter()
         .map(|entry| entry.path.as_str())
         .collect::<Vec<_>>();
-    let expected = [
-        "LICENSE",
-        "README.md",
-        "checksums.sha256",
-        "contracts/PROVENANCE.md",
-        "contracts/api/host-document-render-v2.schema.json",
-        "contracts/api/host-document-v2.md",
-        "contracts/api/host-document-v2.schema.json",
-        "contracts/api/host-terminals-v1.schema.json",
-        "contracts/api/vqro-service-v1.schema.json",
-        "contracts/fixtures/host-document-v2/invalid-action.json",
-        "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
-        "contracts/fixtures/host-document-v2/invalid-unreachable.json",
-        "contracts/fixtures/host-document-v2/valid.json",
-        "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
-        "contracts/vqro-extension-service/world.wit",
-        "services/collections.wasm",
-        "vqro-extension.toml",
-    ];
-    if paths != expected {
+    if paths != EXPECTED_PACKAGE_PATHS {
         bail!("unexpected package inventory: {paths:?}");
     }
     if entries.iter().any(|entry| entry.mode != 0o644) {
@@ -640,6 +648,22 @@ fn sha256(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn source_only_policy_profiles_are_present_and_excluded_from_package_inventory() {
+        let root = workspace_root();
+        for profile in SOURCE_ONLY_PROFILE_FILES {
+            assert!(
+                root.join(profile).is_file(),
+                "missing source profile {profile}"
+            );
+            assert!(!CONTRACT_FILES.iter().any(|(path, _)| *path == profile));
+            assert!(!EXPECTED_PACKAGE_PATHS.contains(&profile));
+        }
+        assert!(EXPECTED_PACKAGE_PATHS
+            .iter()
+            .all(|path| !path.starts_with("profiles/")));
+    }
 
     #[test]
     fn current_source_validation_skips_only_reviewed_digest_binding() {
