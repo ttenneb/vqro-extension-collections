@@ -1,0 +1,79 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  linux-canonical-evidence:
+    # This job produces reproducibility evidence only. It does not publish.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Pinned toolchain
+        run: rustup show
+      - name: Workspace checks
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
+          cargo run --locked -p xtask -- contract-check
+      - name: External target directory
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/vqro-external-target
+        run: |
+          cargo run --locked -p xtask -- package /tmp/external-target.vqrox
+          cargo run --locked -p xtask -- verify /tmp/external-target.vqrox
+      - name: Build, verify, and observe budgets
+        run: |
+          /usr/bin/time -v -o /tmp/package-budget.txt timeout 120s \
+            cargo run --locked -p xtask -- package
+          cargo run --locked -p xtask -- verify dist/vqro-collections-candidate.vqrox
+          cat /tmp/package-budget.txt
+          du -sk target dist
+          tar -xOf dist/vqro-collections-candidate.vqrox services/collections.wasm | wc -c
+          wc -c dist/vqro-collections-candidate.vqrox
+          cargo tree --locked --workspace --depth 1
+          PACKAGE_COUNT=$(cargo metadata --locked --format-version 1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))')
+          test "$PACKAGE_COUNT" -le 60
+          if grep -R -E 'crate::extension_|_extension-service|Command::new\("vqro"' crates vqro-extension.toml; then
+            echo "private host import or Vqro self-spawn detected" >&2
+            exit 1
+          fi
+      - name: Reproduce from distinct source paths
+        run: |
+          mkdir -p /tmp/source-a /tmp/source-b
+          tar --exclude=.git --exclude=target --exclude=dist -cf - . | tar -xf - -C /tmp/source-a
+          tar --exclude=.git --exclude=target --exclude=dist -cf - . | tar -xf - -C /tmp/source-b
+          (cd /tmp/source-a && cargo run --locked -p xtask -- package /tmp/a.vqrox)
+          (cd /tmp/source-b && cargo run --locked -p xtask -- package /tmp/b.vqrox)
+          cmp /tmp/a.vqrox /tmp/b.vqrox
+          sha256sum /tmp/a.vqrox /tmp/b.vqrox
+
+  portable-candidate:
+    # These jobs prove portability only; their outputs are not canonical releases.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Pinned toolchain
+        run: rustup show
+      - name: Workspace checks
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          cargo test --locked --workspace
+      - name: Component and package checks
+        run: |
+          cargo run --locked -p xtask -- contract-check
+          cargo run --locked -p xtask -- package
+          cargo run --locked -p xtask -- verify dist/vqro-collections-candidate.vqrox

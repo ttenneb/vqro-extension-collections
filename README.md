@@ -1,5 +1,34 @@
-# Vqro Collections extension
+# Vqro Collections component candidate
 
-First-party Collections package for Vqro. `src/projection.rs` is the real projection implementation used by the bundled compatibility provider; it speaks the public `host.terminal-groups.v1` / extension-service v1 contracts in the host build. The installable manifest also exposes collection workflows without taking the reserved `vqro.collections` host-document namespace.
+This branch contains a **provisional, non-release, zero-authority candidate**
+for a future Vqro Collections package. It currently provides no user-visible
+Collections behavior, advertises no service methods or capabilities, and makes
+no host calls.
 
-Vqro ships this extension installed and enabled by default. It can be removed from **Extensions → Installed**; removal retains user configuration and state.
+Its bounded purpose is to prove that the repository can independently build a
+WASI-free component and a deterministic `vqro.package.v1` archive without
+importing Vqro's private Rust code or spawning the Vqro executable.
+
+Real Collection state, documents, and actions remain blocked on public M2 host
+contracts. The package ID and namespace also require synthetic curated
+provenance during host integration; an ordinary local-file install must reject
+the `vqro.*` claim. The planned first-support floor is Vqro 0.9.0, but this
+artifact must not be published before that release or before the coordinated
+authoritative Vqro host integration gate passes.
+
+## Build and verify
+
+```sh
+cargo test --locked --workspace
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo run --locked -p xtask -- contract-check
+cargo run --locked -p xtask -- package
+cargo run --locked -p xtask -- verify dist/vqro-collections-candidate.vqrox
+```
+
+Generated `dist/` artifacts are intentionally ignored and must not be
+committed. Canonical reproducibility output is non-release Linux evidence only;
+macOS and Windows jobs prove build/package portability but do not publish or
+define a canonical digest. See `docs/HOST_INTEGRATION_TEST.md` for the
+coordinated authoritative host-side follow-up gate and `docs/BUDGETS.md` for
+candidate budgets.
