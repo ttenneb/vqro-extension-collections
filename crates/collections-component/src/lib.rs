@@ -48,4 +48,6 @@ mod guest {
 }
 
 #[cfg(test)]
+mod policy_fixtures;
+#[cfg(test)]
 mod tests;

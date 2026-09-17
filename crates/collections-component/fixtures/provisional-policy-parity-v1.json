@@ -1,0 +1,65 @@
+{
+  "fixture": "vqro.collections.provisional-policy-parity.v1",
+  "status": "package-owned-test-only-not-a-host-contract",
+  "authority": [
+    "label",
+    "archive"
+  ],
+  "input": {
+    "container_id": "container_000000000000002a",
+    "label": "Helpers",
+    "archived_terminal_ids": [
+      "term_00000000000000000000000000000063",
+      "term_00000000000000000000000000000002",
+      "term_00000000000000000000000000000001"
+    ]
+  },
+  "expected_canonical_policy": {
+    "schema": "vqro.collections.policy",
+    "schema_version": 1,
+    "container_id": "container_000000000000002a",
+    "label": "Helpers",
+    "archived_terminal_ids": [
+      "term_00000000000000000000000000000001",
+      "term_00000000000000000000000000000002",
+      "term_00000000000000000000000000000063"
+    ]
+  },
+  "externally_supplied_neutral_order": [
+    "term_00000000000000000000000000000002",
+    "term_00000000000000000000000000000001",
+    "term_00000000000000000000000000000003"
+  ],
+  "expected_projection": {
+    "label": "Helpers",
+    "terminals": [
+      {
+        "terminal_id": "term_00000000000000000000000000000002",
+        "archived": true
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000001",
+        "archived": true
+      },
+      {
+        "terminal_id": "term_00000000000000000000000000000003",
+        "archived": false
+      }
+    ]
+  },
+  "expected_stale_archive_retention": [
+    "term_00000000000000000000000000000063"
+  ],
+  "invalid_container_ids": [
+    "container_0000000000000000",
+    "container_ffffffffffffffff",
+    "container_000000000000002A",
+    "container_2a",
+    "collection_000000000000002a"
+  ],
+  "invalid_terminal_ids": [
+    "term_0000000000000000000000000000000A",
+    "term_1",
+    "pane_00000000000000000000000000000001"
+  ]
+}
