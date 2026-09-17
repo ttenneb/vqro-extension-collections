@@ -9,71 +9,89 @@ permissions:
   contents: read
 
 jobs:
-  linux-canonical-evidence:
-    # This job produces reproducibility evidence only. It does not publish.
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Pinned toolchain
-        run: rustup show
-      - name: Workspace checks
-        run: |
-          cargo fmt --all --check
-          cargo clippy --locked --workspace --all-targets -- -D warnings
-          cargo test --locked --workspace
-          cargo run --locked -p xtask -- contract-check
-      - name: External target directory
-        env:
-          CARGO_TARGET_DIR: ${{ runner.temp }}/vqro-external-target
-        run: |
-          cargo run --locked -p xtask -- package /tmp/external-target.vqrox
-          cargo run --locked -p xtask -- verify /tmp/external-target.vqrox
-      - name: Build, verify, and observe budgets
-        run: |
-          /usr/bin/time -v -o /tmp/package-budget.txt timeout 120s \
-            cargo run --locked -p xtask -- package
-          cargo run --locked -p xtask -- verify dist/vqro-collections-candidate.vqrox
-          cat /tmp/package-budget.txt
-          du -sk target dist
-          tar -xOf dist/vqro-collections-candidate.vqrox services/collections.wasm | wc -c
-          wc -c dist/vqro-collections-candidate.vqrox
-          cargo tree --locked --workspace --depth 1
-          PACKAGE_COUNT=$(cargo metadata --locked --format-version 1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))')
-          test "$PACKAGE_COUNT" -le 60
-          if grep -R -E 'crate::extension_|_extension-service|Command::new\("vqro"' crates vqro-extension.toml; then
-            echo "private host import or Vqro self-spawn detected" >&2
-            exit 1
-          fi
-      - name: Reproduce from distinct source paths
-        run: |
-          mkdir -p /tmp/source-a /tmp/source-b
-          tar --exclude=.git --exclude=target --exclude=dist -cf - . | tar -xf - -C /tmp/source-a
-          tar --exclude=.git --exclude=target --exclude=dist -cf - . | tar -xf - -C /tmp/source-b
-          (cd /tmp/source-a && cargo run --locked -p xtask -- package /tmp/a.vqrox)
-          (cd /tmp/source-b && cargo run --locked -p xtask -- package /tmp/b.vqrox)
-          cmp /tmp/a.vqrox /tmp/b.vqrox
-          sha256sum /tmp/a.vqrox /tmp/b.vqrox
-
-  portable-candidate:
-    # These jobs prove portability only; their outputs are not canonical releases.
+  clean-cross-platform:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, windows-2022]
+        os: [ubuntu-24.04, macos-14, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: source-a
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          path: source-b
       - name: Pinned toolchain
+        working-directory: source-a
         run: rustup show
       - name: Workspace checks
+        working-directory: source-a
         run: |
           cargo fmt --all --check
           cargo clippy --locked --workspace --all-targets -- -D warnings
           cargo test --locked --workspace
-      - name: Component and package checks
-        run: |
           cargo run --locked -p xtask -- contract-check
-          cargo run --locked -p xtask -- package
-          cargo run --locked -p xtask -- verify dist/vqro-collections-candidate.vqrox
+      - name: Two clean distinct-path builds (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "$RUNNER_TEMP/vqro-target-a" "$RUNNER_TEMP/vqro-target-b"
+          (cd source-a && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-a" cargo run --locked -p xtask -- package "$RUNNER_TEMP/a.vqrox")
+          (cd source-b && CARGO_TARGET_DIR="$RUNNER_TEMP/vqro-target-b" cargo run --locked -p xtask -- package "$RUNNER_TEMP/b.vqrox")
+          (cd source-a && cargo run --locked -p xtask -- verify "$RUNNER_TEMP/a.vqrox")
+          python3 - <<'PY'
+          import hashlib, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"])
+          a = (root / "a.vqrox").read_bytes()
+          b = (root / "b.vqrox").read_bytes()
+          assert a == b, "clean package bytes differ"
+          print(hashlib.sha256(a).hexdigest())
+          PY
+      - name: Two clean distinct-path builds (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $targetA = Join-Path $env:RUNNER_TEMP 'vqro-target-a'
+          $targetB = Join-Path $env:RUNNER_TEMP 'vqro-target-b'
+          $packageA = Join-Path $env:RUNNER_TEMP 'a.vqrox'
+          $packageB = Join-Path $env:RUNNER_TEMP 'b.vqrox'
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $targetA, $targetB
+          Push-Location source-a
+          $env:CARGO_TARGET_DIR = $targetA
+          cargo run --locked -p xtask -- package $packageA
+          if ($LASTEXITCODE -ne 0) { throw 'first package failed' }
+          Pop-Location
+          Push-Location source-b
+          $env:CARGO_TARGET_DIR = $targetB
+          cargo run --locked -p xtask -- package $packageB
+          if ($LASTEXITCODE -ne 0) { throw 'second package failed' }
+          Pop-Location
+          Push-Location source-a
+          cargo run --locked -p xtask -- verify $packageA
+          if ($LASTEXITCODE -ne 0) { throw 'verification failed' }
+          Pop-Location
+          $itemA = Get-Item $packageA
+          $itemB = Get-Item $packageB
+          $hashA = (Get-FileHash -Algorithm SHA256 $packageA).Hash
+          $hashB = (Get-FileHash -Algorithm SHA256 $packageB).Hash
+          if ($itemA.Length -ne $itemB.Length -or $hashA -ne $hashB) {
+            throw 'clean package bytes or hashes differ'
+          }
+          $hashA.ToLowerInvariant()
+      - name: Linux import and authority inspection
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: source-a
+        run: |
+          set -euo pipefail
+          cargo tree --locked --workspace --depth 1
+          PACKAGE_COUNT=$(cargo metadata --locked --format-version 1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))')
+          test "$PACKAGE_COUNT" -le 60
+          if grep -R -E 'crate::extension_|_extension-service|std::process|Command::new|host\.state|focus_terminal' crates vqro-extension.toml; then
+            echo "private host import, forbidden authority, or process spawn detected" >&2
+            exit 1
+          fi

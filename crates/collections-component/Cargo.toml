@@ -9,5 +9,10 @@ publish = false
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = { version = "=1.0.151", features = ["raw_value"] }
+sha2 = "=0.10.9"
+
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wit-bindgen = "=0.51.0"

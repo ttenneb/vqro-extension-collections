@@ -8,8 +8,62 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use wasmparser::{Parser, Payload, Validator, WasmFeatures};
 
-const CONTRACT_SHA256: &str = "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf";
-const PROVENANCE_SHA256: &str = "e345b4813a0db01de0270a643e340486a04dad952b22c1e63f5e13afc6f25e55";
+const CONTRACT_FILES: [(&str, &str); 12] = [
+    (
+        "contracts/vqro-extension-service/world.wit",
+        "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf",
+    ),
+    (
+        "contracts/api/vqro-service-v1.schema.json",
+        "3c2712d8b92b4908a40b92360e7fe089e914a88b1cb07640dc8d5c5d7129bdbc",
+    ),
+    (
+        "contracts/api/host-terminals-v1.schema.json",
+        "3b0a9fff414d1f2b0ca57b8e26910d4da9ec11a5fe30a7704a4a3acc74680449",
+    ),
+    (
+        "contracts/api/host-document-render-v2.schema.json",
+        "a500fef482259ce90772f9e677c3b9a943d006cfd0a75abe7915cf1bc2994776",
+    ),
+    (
+        "contracts/api/host-document-v2.schema.json",
+        "1c433b3b25ca1703204ec51f3f65f02541f2fcd02568105d34da53731d8bef52",
+    ),
+    (
+        "contracts/api/host-document-v2.md",
+        "cd7079f829f9af4b5e4e943c3f34ad77911f8dfc43fb65855e5a07c8c5aa55b1",
+    ),
+    (
+        "contracts/fixtures/host-document-v2/valid.json",
+        "95018a287650b5de06691b200a091643eb5130b0387918812fddadb07e016163",
+    ),
+    (
+        "contracts/fixtures/host-document-v2/invalid-action.json",
+        "10d6a80150e18d0b18d39e6c1f76ea0ed38a4d76f8d961f653a94d18520a637f",
+    ),
+    (
+        "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
+        "2cf6c0d971e06925c553f893a30af0c33049d79b929204a5990199de0a15197f",
+    ),
+    (
+        "contracts/fixtures/host-document-v2/invalid-unreachable.json",
+        "020e74c6f94c63f9f6399d2deaf71956877edebb06dd943a18a98c0ba1a8e100",
+    ),
+    (
+        "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
+        "ace75ef459e96136563ee3cc747d0e2537a8f5cadd0f8af41a95f4ccf3597105",
+    ),
+    (
+        "contracts/PROVENANCE.md",
+        "96aca18d936ea2ad44361d6eccd4fa9d331711bed1f75349fdf21b99606231f2",
+    ),
+];
+const EXPECTED_PACKAGE_SHA256: &str =
+    "7cf906ee0c6d5a30fe913dccd169d8781afd8dc8d66816e8f3c361eddad56d55";
+const EXPECTED_MANIFEST_SHA256: &str =
+    "73c6accc4e35f9030731973e84ee3b1cce252c1034ab99e78ca6425cf40e9295";
+const EXPECTED_COMPONENT_SHA256: &str =
+    "ca3801cefbf592f8d3b731a2aae45775bba15cb8522175b23ff876f9ebceaf0f";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -21,9 +75,10 @@ const MAX_PATH_BYTES: usize = 512;
 const MAX_PATH_COMPONENT_BYTES: usize = 128;
 const MAX_PATH_DEPTH: usize = 16;
 const PACKAGE_NAME: &str = "vqro-collections-candidate.vqrox";
-const ALLOWED_COMPONENT_IMPORTS: [&str; 3] = [
+const ALLOWED_COMPONENT_IMPORTS: [&str; 4] = [
     "service-descriptor",
     "service-error",
+    "vqro:extension/host@1.0.0",
     "vqro:extension/types@1.0.0",
 ];
 
@@ -75,20 +130,15 @@ fn cargo_target_dir(root: &Path) -> PathBuf {
 }
 
 fn contract_check() -> Result<()> {
-    let path = workspace_root().join("wit/vqro-extension-service/world.wit");
-    let actual = sha256(&fs::read(&path).with_context(|| format!("read {}", path.display()))?);
-    if actual != CONTRACT_SHA256 {
-        bail!("WIT snapshot hash mismatch: expected {CONTRACT_SHA256}, got {actual}");
+    let root = workspace_root();
+    for (relative, expected) in CONTRACT_FILES {
+        let path = root.join(relative);
+        let actual = sha256(&fs::read(&path).with_context(|| format!("read {}", path.display()))?);
+        if actual != expected {
+            bail!("contract hash mismatch for {relative}: expected {expected}, got {actual}");
+        }
+        println!("contract {relative} {actual}");
     }
-    let provenance_path = workspace_root().join("wit/vqro-extension-service/PROVENANCE.md");
-    let provenance = sha256(
-        &fs::read(&provenance_path)
-            .with_context(|| format!("read {}", provenance_path.display()))?,
-    );
-    if provenance != PROVENANCE_SHA256 {
-        bail!("WIT provenance hash mismatch: expected {PROVENANCE_SHA256}, got {provenance}");
-    }
-    println!("contract {actual} provenance {provenance}");
     Ok(())
 }
 
@@ -129,6 +179,9 @@ fn package(output: Option<&Path>) -> Result<()> {
     let mut payload = BTreeMap::new();
     payload.insert("LICENSE".to_string(), fs::read(root.join("LICENSE"))?);
     payload.insert("README.md".to_string(), fs::read(root.join("README.md"))?);
+    for (relative, _) in CONTRACT_FILES {
+        payload.insert(relative.to_string(), fs::read(root.join(relative))?);
+    }
     payload.insert("services/collections.wasm".to_string(), component);
     payload.insert(
         "vqro-extension.toml".to_string(),
@@ -169,6 +222,10 @@ fn verify_package(path: &Path) -> Result<()> {
         bail!("package exceeds the host 8 MiB archive limit");
     }
     let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    let package_digest = sha256(&bytes);
+    if package_digest != EXPECTED_PACKAGE_SHA256 {
+        bail!("package digest mismatch: expected {EXPECTED_PACKAGE_SHA256}, got {package_digest}");
+    }
     let entries = read_archive(&bytes)?;
     if canonical_archive(&entries)? != bytes {
         bail!("package is not the canonical deterministic tar encoding");
@@ -182,6 +239,18 @@ fn verify_package(path: &Path) -> Result<()> {
         "LICENSE",
         "README.md",
         "checksums.sha256",
+        "contracts/PROVENANCE.md",
+        "contracts/api/host-document-render-v2.schema.json",
+        "contracts/api/host-document-v2.md",
+        "contracts/api/host-document-v2.schema.json",
+        "contracts/api/host-terminals-v1.schema.json",
+        "contracts/api/vqro-service-v1.schema.json",
+        "contracts/fixtures/host-document-v2/invalid-action.json",
+        "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
+        "contracts/fixtures/host-document-v2/invalid-unreachable.json",
+        "contracts/fixtures/host-document-v2/valid.json",
+        "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
+        "contracts/vqro-extension-service/world.wit",
         "services/collections.wasm",
         "vqro-extension.toml",
     ];
@@ -211,7 +280,22 @@ fn verify_package(path: &Path) -> Result<()> {
         bail!("checksum inventory is not exact or canonical");
     }
 
+    for (contract_path, expected_digest) in CONTRACT_FILES {
+        let actual = sha256(by_path[contract_path]);
+        if actual != expected_digest {
+            bail!(
+                "packaged contract digest mismatch for {contract_path}: expected {expected_digest}, got {actual}"
+            );
+        }
+    }
+
     let manifest_bytes = by_path["vqro-extension.toml"];
+    let manifest_digest = sha256(manifest_bytes);
+    if manifest_digest != EXPECTED_MANIFEST_SHA256 {
+        bail!(
+            "manifest digest mismatch: expected {EXPECTED_MANIFEST_SHA256}, got {manifest_digest}"
+        );
+    }
     let expected_manifest = fs::read(workspace_root().join("vqro-extension.toml"))?;
     if manifest_bytes != expected_manifest {
         bail!("package manifest differs from the reviewed candidate manifest");
@@ -221,30 +305,44 @@ fn verify_package(path: &Path) -> Result<()> {
         "manifest_version = 2",
         "package_contract = \"vqro.package.v1\"",
         "id = \"vqro.collections\"",
+        "id = \"collections\"",
         "version = \"0.0.0\"",
         "min_vqro_version = \"0.9.0\"",
-        "provides = []",
-        "capabilities = []",
+        "provides = [\"host_document\"]",
+        "capabilities = [\"host.terminals.read\"]",
         "kind = \"component\"",
         "world = \"vqro:extension/service@1.0.0\"",
     ] {
-        if !manifest.contains(required) {
-            bail!("manifest is missing exact candidate declaration {required:?}");
+        if manifest.matches(required).count() != 1 {
+            bail!("manifest must contain exactly one candidate declaration {required:?}");
         }
+    }
+    if manifest.matches("[[services]]").count() != 1
+        || manifest.matches("[services.runtime]").count() != 1
+    {
+        bail!("manifest must declare exactly one service and runtime");
     }
     for forbidden in [
         "command =",
         "_extension-service",
-        "host_document",
         "focus_terminal",
+        "host.state",
+        "wasi",
     ] {
         if manifest.contains(forbidden) {
             bail!("manifest contains forbidden authority or self-spawn marker {forbidden:?}");
         }
     }
 
-    verify_component(by_path["services/collections.wasm"])?;
-    println!("verified {} sha256={}", path.display(), sha256(&bytes));
+    let component_bytes = by_path["services/collections.wasm"];
+    let component_digest = sha256(component_bytes);
+    if component_digest != EXPECTED_COMPONENT_SHA256 {
+        bail!(
+            "component digest mismatch: expected {EXPECTED_COMPONENT_SHA256}, got {component_digest}"
+        );
+    }
+    verify_component(component_bytes)?;
+    println!("verified {} sha256={package_digest}", path.display());
     Ok(())
 }
 
@@ -267,7 +365,7 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
 
     let mut imports = BTreeSet::new();
     let mut exports = BTreeSet::new();
-    let mut core_imports = Vec::new();
+    let mut core_imports = BTreeSet::new();
     for payload in Parser::new(0).parse_all(bytes) {
         match payload? {
             Payload::ComponentImportSection(section) => {
@@ -283,7 +381,7 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
             Payload::ImportSection(section) => {
                 for import in section.into_imports() {
                     let import = import?;
-                    core_imports.push(format!("{}::{}", import.module, import.name));
+                    core_imports.insert(format!("{}::{}", import.module, import.name));
                 }
             }
             _ => {}
@@ -299,12 +397,40 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
     if exports != BTreeSet::from(["descriptor".to_string(), "invoke".to_string()]) {
         bail!("component export budget mismatch: {exports:?}");
     }
-    if !core_imports.is_empty() {
-        bail!("component contains unexpected core imports: {core_imports:?}");
+    let expected_core_imports = BTreeSet::from([
+        "::$imports".to_string(),
+        "::0".to_string(),
+        "vqro:extension/host@1.0.0::call".to_string(),
+        "vqro:extension/host@1.0.0::cancelled".to_string(),
+    ]);
+    if core_imports != expected_core_imports {
+        bail!(
+            "component core lowering import budget mismatch: expected {expected_core_imports:?}, got {core_imports:?}"
+        );
     }
-    for marker in [b"collections".as_slice(), b"no_authority".as_slice()] {
-        if !bytes.windows(marker.len()).any(|window| window == marker) {
-            bail!("component is missing expected zero-authority marker");
+    if !bytes
+        .windows(b"collections".len())
+        .any(|window| window == b"collections")
+    {
+        bail!("component is missing the collections service marker");
+    }
+    for marker in [
+        b"host.document.render".as_slice(),
+        b"host.terminals.read".as_slice(),
+        b"terminals.snapshot".as_slice(),
+    ] {
+        if bytes
+            .windows(marker.len())
+            .filter(|window| *window == marker)
+            .count()
+            != 1
+        {
+            bail!("component must contain exactly one reviewed method/capability marker");
+        }
+    }
+    for marker in [b"host.state".as_slice(), b"focus_terminal".as_slice()] {
+        if bytes.windows(marker.len()).any(|window| window == marker) {
+            bail!("component contains a forbidden authority marker");
         }
     }
     if bytes.windows(5).any(|window| window == b"wasi:") {

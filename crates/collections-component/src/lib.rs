@@ -1,60 +1,51 @@
-//! Zero-authority candidate for the Vqro Collections package.
-//!
-//! This component deliberately advertises no methods and performs no host
-//! calls. Collection behavior remains blocked on public M2 contracts.
+//! External, read-only structural shadow for Vqro terminal topology.
 
-#[cfg(any(target_arch = "wasm32", test))]
-const SERVICE_ID: &str = "collections";
-#[cfg(any(target_arch = "wasm32", test))]
-const SERVICE_METHODS: &[&str] = &[];
-#[cfg(any(target_arch = "wasm32", test))]
-const NO_AUTHORITY_CODE: &str = "no_authority";
-#[cfg(any(target_arch = "wasm32", test))]
-const NO_AUTHORITY_MESSAGE: &str = "Collections candidate has no callable methods";
+pub mod projection;
+pub mod service;
 
 #[cfg(target_arch = "wasm32")]
 mod guest {
     wit_bindgen::generate!({
-        path: "../../wit/vqro-extension-service",
+        path: "../../contracts/vqro-extension-service",
         world: "service",
     });
 
-    struct CollectionsCandidate;
+    use self::vqro::extension::host;
 
-    impl Guest for CollectionsCandidate {
+    struct WitHostBridge;
+
+    impl crate::service::HostBridge for WitHostBridge {
+        type Error = ();
+
+        fn cancelled(&mut self) -> bool {
+            host::cancelled()
+        }
+
+        fn call(&mut self, request: &[u8]) -> Result<Vec<u8>, Self::Error> {
+            host::call(request).map_err(|_| ())
+        }
+    }
+
+    struct Collections;
+
+    impl Guest for Collections {
         fn descriptor() -> Result<ServiceDescriptor, ServiceError> {
             Ok(ServiceDescriptor {
-                service_id: super::SERVICE_ID.into(),
-                methods: super::SERVICE_METHODS
-                    .iter()
-                    .map(|method| (*method).to_string())
-                    .collect(),
+                service_id: crate::service::SERVICE_ID.into(),
+                methods: vec![crate::service::METHOD.into()],
             })
         }
 
-        fn invoke(_request: Vec<u8>) -> Result<Vec<u8>, ServiceError> {
-            Err(ServiceError {
-                code: super::NO_AUTHORITY_CODE.into(),
-                message: super::NO_AUTHORITY_MESSAGE.into(),
+        fn invoke(request: Vec<u8>) -> Result<Vec<u8>, ServiceError> {
+            crate::service::invoke(&mut WitHostBridge, &request).map_err(|error| ServiceError {
+                code: error.code().into(),
+                message: error.message().into(),
             })
         }
     }
 
-    export!(CollectionsCandidate);
+    export!(Collections);
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn candidate_has_no_native_behavior() {
-        // Product behavior must not be added before public M2 contracts land.
-        assert_eq!(env!("CARGO_PKG_VERSION"), "0.0.0");
-        assert_eq!(super::SERVICE_ID, "collections");
-        assert!(super::SERVICE_METHODS.is_empty());
-        assert_eq!(super::NO_AUTHORITY_CODE, "no_authority");
-        assert_eq!(
-            super::NO_AUTHORITY_MESSAGE,
-            "Collections candidate has no callable methods"
-        );
-    }
-}
+mod tests;

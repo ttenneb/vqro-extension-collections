@@ -1,5 +1,5 @@
-# Provisional, non-release, zero-authority candidate. Do not publish before
-# Vqro 0.9.0 or before the coordinated authoritative host gate passes.
+# Provisional, non-release, read-only structural-shadow candidate. Do not
+# publish before Vqro 0.9.0 or the coordinated authoritative host gate passes.
 manifest_version = 2
 package_contract = "vqro.package.v1"
 id = "vqro.collections"
@@ -9,8 +9,8 @@ namespaces = ["vqro.collections"]
 
 [[services]]
 id = "collections"
-provides = []
-capabilities = []
+provides = ["host_document"]
+capabilities = ["host.terminals.read"]
 
 [services.runtime]
 kind = "component"
