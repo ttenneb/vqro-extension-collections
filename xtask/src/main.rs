@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use wasmparser::{Parser, Payload, Validator, WasmFeatures};
 
-const CONTRACT_FILES: [(&str, &str); 18] = [
+const CONTRACT_FILES: [(&str, &str); 21] = [
     (
         "contracts/vqro-extension-service/world.wit",
         "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf",
@@ -59,27 +59,39 @@ const CONTRACT_FILES: [(&str, &str); 18] = [
     ),
     (
         "contracts/package/README.md",
-        "d24291ef1cbba033393b1dd7a44b48e8be450d3cbba8f640f3f098f58625e7dd",
+        "efef31440b91de8b05ff99ef857a301864b05a141f7e0c1c13fdc3fa4708515a",
     ),
     (
         "contracts/package/collections-document-action-v1.schema.json",
-        "92c8858b40995747a234b8ee17149c000244b82d754265373f1b702a467b89b4",
+        "6f8e66d759fa61e2419d912bbb91f02440505a08ab7e3addd229bc70d7fd73a2",
     ),
     (
         "contracts/package/effect-plan-v1.schema.json",
-        "929bf84d06d5a707ee5e78dbb1af7b324f0df81088fc9205539a37df9c12bcf1",
+        "e19814f1bb52fadbac5a18d4ccc662027b4a0abcd424151d16ebed07d2c4d7cb",
+    ),
+    (
+        "contracts/package/collections-migration-v1.schema.json",
+        "e3dc275dcc08d546c27837af4619f297f65a4a419771ff685af8280edc980ad5",
     ),
     (
         "contracts/fixtures/collections-actions/label-invocation.json",
-        "04b55caf32faaad72c06b44f9f0c538a8aff3c36948c9b999c9c38d8dcb70f69",
+        "096272d3f6cac1b895a8f5b14acf9d948364c28bffe800cf6ae960840936838f",
     ),
     (
         "contracts/fixtures/collections-actions/label-effect-plan.json",
-        "1a92a639ab3a83fedb07be64622bccd24c0dd5189ec66269c314c78d6253fbae",
+        "b85e5bb40a9b32750bda8add8a46bd3226369bba7b1ae83bc1db51e8a15f2038",
+    ),
+    (
+        "contracts/fixtures/collections-migration/legacy-input.json",
+        "e0bcdfc38775520e5a7a1d1426d07518a6521544975f6f4344946ab8ac4177fd",
+    ),
+    (
+        "contracts/fixtures/collections-migration/migration-plan.json",
+        "fd8220ca6937b7d6aaa6b9c9720b897ce5d793777d42a118c4fd267e398e2abf",
     ),
     (
         "contracts/PROVENANCE.md",
-        "62f27f1c08dcd9b87d11b9b6b8fd7a4a93b4c108121258be80dfb6e9dafc783d",
+        "51636642391755c68de1595d4b351eb0ea1bc7a1e32130d79df91bc7a8f5a1fb",
     ),
 ];
 #[cfg(test)]
@@ -92,7 +104,7 @@ const SOURCE_ONLY_PROFILE_FILES: [&str; 7] = [
     "profiles/fixtures/collections-policy-v1-invalid.json",
     "profiles/fixtures/collections-policy-v1.json",
 ];
-const EXPECTED_PACKAGE_PATHS: [&str; 23] = [
+const EXPECTED_PACKAGE_PATHS: [&str; 26] = [
     "LICENSE",
     "README.md",
     "checksums.sha256",
@@ -105,6 +117,8 @@ const EXPECTED_PACKAGE_PATHS: [&str; 23] = [
     "contracts/api/vqro-service-v1.schema.json",
     "contracts/fixtures/collections-actions/label-effect-plan.json",
     "contracts/fixtures/collections-actions/label-invocation.json",
+    "contracts/fixtures/collections-migration/legacy-input.json",
+    "contracts/fixtures/collections-migration/migration-plan.json",
     "contracts/fixtures/host-document-v2/invalid-action.json",
     "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
     "contracts/fixtures/host-document-v2/invalid-unreachable.json",
@@ -112,17 +126,18 @@ const EXPECTED_PACKAGE_PATHS: [&str; 23] = [
     "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
     "contracts/package/README.md",
     "contracts/package/collections-document-action-v1.schema.json",
+    "contracts/package/collections-migration-v1.schema.json",
     "contracts/package/effect-plan-v1.schema.json",
     "contracts/vqro-extension-service/world.wit",
     "services/collections.wasm",
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "d482150b9a2d23f918e4a6e0505164c8e4a1db1a554a661f7cc6f0c426632178";
+    "d9d05c130f8b79e0e508269d3872bf7491733c07186d69c7d4bde7100e175859";
 const EXPECTED_MANIFEST_SHA256: &str =
     "1e03800d55f56eb959e9ebdabe6c0cc4380377683c5e2cbf939e792ca8f90304";
 const EXPECTED_COMPONENT_SHA256: &str =
-    "1ab4ecb05dd4569fa0c98d9aa5f85bb20ed1773688a2714c8433b04f799fd890";
+    "afbc83795434cbd92438193a34f71566438220848c67baa8de52d58615bb865e";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;

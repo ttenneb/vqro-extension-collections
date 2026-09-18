@@ -477,18 +477,32 @@ pub(crate) fn state_snapshot_dependency(
         .revision
         .checked_add(1)
         .ok_or(ProjectionError::DocumentInvalid)?;
+    Ok(state_dependency_identity(
+        &state.store_id,
+        &state.namespace,
+        revision,
+        state.store_generation,
+    ))
+}
+
+pub(crate) fn state_dependency_identity(
+    store_id: &str,
+    namespace: &str,
+    revision: u64,
+    generation: u64,
+) -> DocumentDependency {
     let mut digest = Sha256::new();
     digest.update(b"vqro.host.state.document-dependency.v1\0");
-    for value in [&state.store_id, &state.namespace] {
+    for value in [store_id, namespace] {
         digest.update((value.len() as u64).to_be_bytes());
         digest.update(value.as_bytes());
     }
-    Ok(DocumentDependency {
+    DocumentDependency {
         contract: "host.state.v1".into(),
         scope_id: format!("state_{:x}", digest.finalize()),
         revision,
-        generation: state.store_generation,
-    })
+        generation,
+    }
 }
 
 fn node_id(index: usize) -> String {

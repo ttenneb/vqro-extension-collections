@@ -44,11 +44,14 @@ claim or grant host execution semantics:
 
 | Local path | Ownership | SHA-256 |
 | --- | --- | --- |
-| `package/README.md` | `vqro.collections` package | `d24291ef1cbba033393b1dd7a44b48e8be450d3cbba8f640f3f098f58625e7dd` |
-| `package/collections-document-action-v1.schema.json` | `vqro.collections` package | `92c8858b40995747a234b8ee17149c000244b82d754265373f1b702a467b89b4` |
-| `package/effect-plan-v1.schema.json` | `vqro.collections` package | `929bf84d06d5a707ee5e78dbb1af7b324f0df81088fc9205539a37df9c12bcf1` |
-| `fixtures/collections-actions/label-invocation.json` | `vqro.collections` package | `04b55caf32faaad72c06b44f9f0c538a8aff3c36948c9b999c9c38d8dcb70f69` |
-| `fixtures/collections-actions/label-effect-plan.json` | `vqro.collections` package | `1a92a639ab3a83fedb07be64622bccd24c0dd5189ec66269c314c78d6253fbae` |
+| `package/README.md` | `vqro.collections` package | `efef31440b91de8b05ff99ef857a301864b05a141f7e0c1c13fdc3fa4708515a` |
+| `package/collections-document-action-v1.schema.json` | `vqro.collections` package | `6f8e66d759fa61e2419d912bbb91f02440505a08ab7e3addd229bc70d7fd73a2` |
+| `package/effect-plan-v1.schema.json` | `vqro.collections` package | `e19814f1bb52fadbac5a18d4ccc662027b4a0abcd424151d16ebed07d2c4d7cb` |
+| `package/collections-migration-v1.schema.json` | `vqro.collections` package | `e3dc275dcc08d546c27837af4619f297f65a4a419771ff685af8280edc980ad5` |
+| `fixtures/collections-actions/label-invocation.json` | `vqro.collections` package | `096272d3f6cac1b895a8f5b14acf9d948364c28bffe800cf6ae960840936838f` |
+| `fixtures/collections-actions/label-effect-plan.json` | `vqro.collections` package | `b85e5bb40a9b32750bda8add8a46bd3226369bba7b1ae83bc1db51e8a15f2038` |
+| `fixtures/collections-migration/legacy-input.json` | `vqro.collections` package | `e0bcdfc38775520e5a7a1d1426d07518a6521544975f6f4344946ab8ac4177fd` |
+| `fixtures/collections-migration/migration-plan.json` | `vqro.collections` package | `fd8220ca6937b7d6aaa6b9c9720b897ce5d793777d42a118c4fd267e398e2abf` |
 
 `cargo run --locked -p xtask -- contract-check` verifies every listed local
 asset. Packaging carries the same assets and `xtask verify` binds every one to

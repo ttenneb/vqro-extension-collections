@@ -11,6 +11,8 @@ SHA-256 of the exact source bytes, the source generation, complete policy
 values, and marker material at `migration:legacy-v1`. The marker repeats schema,
 source digest, and generation so a host-owned rollback/roll-forward journal can
 CAS it alongside migrated values. The adapter performs no writes. Repeating it
-for identical bytes is byte-for-byte deterministic. This fixture pins the
-legacy shape available to this package; any different host legacy shape is a
-contract mismatch and must be supplied rather than inferred.
+for identical bytes is byte-for-byte deterministic. The machine-readable package schema and paired input/output fixtures are under
+`contracts/package/` and `contracts/fixtures/collections-migration/`; they are
+carried in the deterministic package. These fixtures pin the legacy shape
+available to this package; any different host legacy shape is a contract
+mismatch and must be supplied rather than inferred.

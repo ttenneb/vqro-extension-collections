@@ -23,7 +23,7 @@ fn dependencies(revision: u64) -> Vec<DocumentDependency> {
     vec![
         DocumentDependency {
             contract: "host.state.v1".into(),
-            scope_id: "state_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            scope_id: "state_c44bb5f411b1c3102a74c7fbd1b189ab9f186b39995aeab32dafb8e0e1addc2d".into(),
             revision: revision + 1,
             generation: 7,
         },
@@ -46,7 +46,7 @@ fn action(action_id: &str, payload: Value, value: Value) -> Vec<u8> {
         "payload": payload,
         "observed_dependencies": dependencies(4),
         "authority_generation": 9,
-        "state": {"namespace":"vqro.collections","revision":4,"key":KEY,"value":value}
+        "state": {"namespace":"vqro.collections","store_id":"session:test","store_generation":7,"revision":4,"key":KEY,"value":value}
     }))
     .unwrap()
 }
@@ -95,8 +95,11 @@ fn label_archive_and_unarchive_emit_one_whole_value_cas() {
     .unwrap();
     assert_eq!(label.effects.len(), 1);
     assert_eq!(label.effects[0].kind, "state.cas");
+    assert_eq!(label.effects[0].expected_store_generation, 7);
     assert_eq!(label.effects[0].expected_value, Value::Null);
     assert_eq!(label.effects[0].value["label"], "Ops");
+    assert_eq!(label.preconditions.state_store_id, "session:test");
+    assert_eq!(label.preconditions.state_store_generation, 7);
     assert_eq!(label.preconditions.state_revision, 4);
     assert_eq!(label.preconditions.observed_dependencies, dependencies(4));
 
@@ -163,12 +166,22 @@ fn stale_revoked_and_malformed_actions_fail_closed() {
         Value::Null,
     );
     assert_eq!(plan(&valid, 10), Err(ActionError::Revoked));
-    let mut stale: Value = serde_json::from_slice(&valid).unwrap();
-    stale["observed_dependencies"][0]["revision"] = json!(4);
-    assert_eq!(
-        plan(&serde_json::to_vec(&stale).unwrap(), 9),
-        Err(ActionError::Stale)
-    );
+    for (field, replacement) in [
+        ("revision", json!(4)),
+        ("generation", json!(8)),
+        (
+            "scope_id",
+            json!("state_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        ),
+    ] {
+        let mut stale: Value = serde_json::from_slice(&valid).unwrap();
+        stale["observed_dependencies"][0][field] = replacement;
+        assert_eq!(
+            plan(&serde_json::to_vec(&stale).unwrap(), 9),
+            Err(ActionError::Stale),
+            "{field}"
+        );
+    }
     for payload in [
         json!({"container_id":KEY}),
         json!({"container_id":KEY,"label":"ok","unknown":true}),
@@ -183,7 +196,8 @@ fn stale_revoked_and_malformed_actions_fail_closed() {
 
 #[test]
 fn legacy_migration_is_exact_and_idempotent() {
-    let source = include_bytes!("../../../profiles/fixtures/collections-legacy-v1.json");
+    let source =
+        include_bytes!("../../../contracts/fixtures/collections-migration/legacy-input.json");
     let first = migrate_legacy(source).unwrap();
     let second = migrate_legacy(source).unwrap();
     assert_eq!(first, second);
@@ -193,6 +207,11 @@ fn legacy_migration_is_exact_and_idempotent() {
         first.marker.value.source_digest_sha256,
         first.source_digest_sha256
     );
+    let expected: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/fixtures/collections-migration/migration-plan.json"
+    ))
+    .unwrap();
+    assert_eq!(serde_json::to_value(&first).unwrap(), expected);
     assert_eq!(first.values[KEY]["label"], "Helpers");
     assert_eq!(first.values[KEY]["archived_terminal_ids"], json!([TERM2]));
 

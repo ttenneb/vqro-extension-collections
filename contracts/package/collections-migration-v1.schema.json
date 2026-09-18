@@ -1,0 +1,43 @@
+{
+  "$id": "urn:vqro.collections:migration:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {"$ref": "#/$defs/legacy_input"},
+    {"$ref": "#/$defs/migration_plan"}
+  ],
+  "$defs": {
+    "uint64_nonzero": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+    "legacy_value": {
+      "additionalProperties": false,
+      "properties": {
+        "archived_terminal_ids": {"items": {"pattern": "^term_[0-9a-f]{32}$", "type": "string"}, "maxItems": 64, "type": "array", "uniqueItems": true},
+        "label": {"maxLength": 4096, "type": "string"}
+      },
+      "required": ["archived_terminal_ids"], "type": "object"
+    },
+    "legacy_input": {
+      "additionalProperties": false,
+      "properties": {
+        "collections": {"additionalProperties": {"$ref": "#/$defs/legacy_value"}, "maxProperties": 512, "propertyNames": {"pattern": "^container_[0-9a-f]{16}$"}, "type": "object"},
+        "contract": {"const": "vqro.collections.legacy.v1"}, "source_generation": {"$ref": "#/$defs/uint64_nonzero"}
+      },
+      "required": ["contract", "source_generation", "collections"], "type": "object"
+    },
+    "marker_value": {
+      "additionalProperties": false,
+      "properties": {"schema": {"const": "vqro.collections.migration.v1"}, "source_digest_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"}, "source_generation": {"$ref": "#/$defs/uint64_nonzero"}},
+      "required": ["schema", "source_digest_sha256", "source_generation"], "type": "object"
+    },
+    "migration_plan": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": {"const": "vqro.collections.migration.v1"},
+        "marker": {"additionalProperties": false, "properties": {"key": {"const": "migration:legacy-v1"}, "value": {"$ref": "#/$defs/marker_value"}}, "required": ["key", "value"], "type": "object"},
+        "namespace": {"const": "vqro.collections"}, "source_digest_sha256": {"pattern": "^[0-9a-f]{64}$", "type": "string"},
+        "source_generation": {"$ref": "#/$defs/uint64_nonzero"},
+        "values": {"additionalProperties": {"type": "object"}, "maxProperties": 512, "propertyNames": {"pattern": "^container_[0-9a-f]{16}$"}, "type": "object"}
+      },
+      "required": ["contract", "namespace", "source_digest_sha256", "source_generation", "values", "marker"], "type": "object"
+    }
+  }
+}

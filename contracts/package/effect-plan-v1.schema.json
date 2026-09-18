@@ -2,10 +2,13 @@
   "$id": "urn:vqro.collections:effect-plan:v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
+  "description": "The observed dependency vector is copied byte-semantically from a validated invocation and remains strictly sorted and unique.",
   "properties": {
-    "action_id": {"type": "string"}, "authority_generation": {"minimum": 1, "type": "integer"},
-    "contract": {"const": "vqro.effect-plan.v1"}, "document_id": {"type": "string"},
-    "effects": {"items": {"$ref": "#/$defs/cas"}, "maxItems": 1, "type": "array"},
+    "action_id": {"enum": ["vqro.collections.label.set", "vqro.collections.terminal.archive", "vqro.collections.terminal.unarchive"]},
+    "authority_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+    "contract": {"const": "vqro.effect-plan.v1"},
+    "document_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$", "type": "string"},
+    "effects": {"items": {"$ref": "#/$defs/cas"}, "maxItems": 1, "minItems": 1, "type": "array"},
     "package_id": {"const": "vqro.collections"}, "preconditions": {"$ref": "#/$defs/preconditions"},
     "service_id": {"const": "collections"}
   },
@@ -14,26 +17,36 @@
   "$defs": {
     "dependency": {
       "additionalProperties": false,
-      "properties": {"contract": {"type": "string"}, "generation": {"minimum": 1, "type": "integer"}, "revision": {"minimum": 1, "type": "integer"}, "scope_id": {"type": "string"}},
+      "properties": {
+        "contract": {"maxLength": 128, "pattern": "^[a-z0-9-]+(?:\\.[a-z0-9-]+)+$", "type": "string"},
+        "generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+        "revision": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+        "scope_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$", "type": "string"}
+      },
       "required": ["contract", "scope_id", "revision", "generation"], "type": "object"
     },
     "preconditions": {
       "additionalProperties": false,
       "properties": {
-        "authority_generation": {"minimum": 1, "type": "integer"},
+        "authority_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
         "observed_dependencies": {"items": {"$ref": "#/$defs/dependency"}, "maxItems": 64, "minItems": 1, "type": "array"},
-        "state_namespace": {"const": "vqro.collections"}, "state_revision": {"minimum": 0, "type": "integer"}
+        "state_namespace": {"const": "vqro.collections"},
+        "state_revision": {"maximum": 18446744073709551614, "minimum": 0, "type": "integer"},
+        "state_store_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+        "state_store_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:-]+$", "type": "string"}
       },
-      "required": ["authority_generation", "observed_dependencies", "state_namespace", "state_revision"], "type": "object"
+      "required": ["authority_generation", "observed_dependencies", "state_namespace", "state_store_id", "state_store_generation", "state_revision"], "type": "object"
     },
     "cas": {
       "additionalProperties": false,
       "properties": {
-        "expected_revision": {"minimum": 0, "type": "integer"}, "expected_value": true,
-        "key": {"pattern": "^container_[0-9a-f]{16}$", "type": "string"}, "kind": {"const": "state.cas"},
-        "namespace": {"const": "vqro.collections"}, "value": {"type": "object"}
+        "expected_revision": {"maximum": 18446744073709551614, "minimum": 0, "type": "integer"},
+        "expected_store_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
+        "expected_value": {"oneOf": [{"type": "null"}, {"type": "object"}]},
+        "key": {"not": {"enum": ["container_0000000000000000", "container_ffffffffffffffff"]}, "pattern": "^container_[0-9a-f]{16}$", "type": "string"},
+        "kind": {"const": "state.cas"}, "namespace": {"const": "vqro.collections"}, "value": {"type": "object"}
       },
-      "required": ["kind", "namespace", "key", "expected_revision", "expected_value", "value"], "type": "object"
+      "required": ["kind", "namespace", "key", "expected_store_generation", "expected_revision", "expected_value", "value"], "type": "object"
     }
   }
 }

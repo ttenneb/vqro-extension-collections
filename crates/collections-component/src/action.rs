@@ -1,7 +1,7 @@
 //! Pure package-owned document-action planner. It emits data; it never executes effects.
 
 use crate::policy::{decode_policy_bytes, decode_policy_value, PolicyRecord, NAMESPACE};
-use crate::projection::DocumentDependency;
+use crate::projection::{state_dependency_identity, DocumentDependency};
 use serde::{Deserialize, Serialize};
 use serde_json::{value::RawValue, Value};
 use std::collections::BTreeSet;
@@ -35,6 +35,8 @@ pub struct ActionParams {
 #[serde(deny_unknown_fields)]
 pub struct ActionState {
     pub namespace: String,
+    pub store_id: String,
+    pub store_generation: u64,
     pub revision: u64,
     pub key: String,
     /// `null` means the key was absent. Objects are decoded from their raw bytes
@@ -61,6 +63,8 @@ pub struct Preconditions {
     pub authority_generation: u64,
     pub observed_dependencies: Vec<DocumentDependency>,
     pub state_namespace: &'static str,
+    pub state_store_id: String,
+    pub state_store_generation: u64,
     pub state_revision: u64,
 }
 
@@ -70,6 +74,7 @@ pub struct StateCasEffect {
     pub kind: &'static str,
     pub namespace: &'static str,
     pub key: String,
+    pub expected_store_generation: u64,
     pub expected_revision: u64,
     pub expected_value: Value,
     pub value: Value,
@@ -109,6 +114,7 @@ pub fn plan(params_bytes: &[u8], runtime_generation: u64) -> Result<EffectPlanV1
         kind: "state.cas",
         namespace: NAMESPACE,
         key: params.state.key.clone(),
+        expected_store_generation: params.state.store_generation,
         expected_revision: params.state.revision,
         expected_value,
         value: updated_value,
@@ -124,6 +130,8 @@ pub fn plan(params_bytes: &[u8], runtime_generation: u64) -> Result<EffectPlanV1
             authority_generation: params.authority_generation,
             observed_dependencies: params.observed_dependencies,
             state_namespace: NAMESPACE,
+            state_store_id: params.state.store_id,
+            state_store_generation: params.state.store_generation,
             state_revision: params.state.revision,
         },
         effects: vec![effect],
@@ -142,6 +150,8 @@ fn validate_fence(params: &ActionParams, runtime_generation: u64) -> Result<(), 
         || params.package_id != "vqro.collections"
         || params.service_id != "collections"
         || params.state.namespace != NAMESPACE
+        || !valid_state_id(&params.state.store_id)
+        || params.state.store_generation == 0
         || !valid_opaque_id(&params.document_id)
         || !valid_container_id(&params.state.key)
         || params.payload.get().len() > MAX_PAYLOAD_BYTES
@@ -165,12 +175,18 @@ fn validate_fence(params: &ActionParams, runtime_generation: u64) -> Result<(), 
         .revision
         .checked_add(1)
         .ok_or(ActionError::Invalid)?;
+    let expected_dependency = state_dependency_identity(
+        &params.state.store_id,
+        &params.state.namespace,
+        expected_revision,
+        params.state.store_generation,
+    );
     let state_dependencies = params
         .observed_dependencies
         .iter()
         .filter(|dependency| dependency.contract == "host.state.v1")
         .collect::<Vec<_>>();
-    if state_dependencies.len() != 1 || state_dependencies[0].revision != expected_revision {
+    if state_dependencies.len() != 1 || *state_dependencies[0] != expected_dependency {
         return Err(ActionError::Stale);
     }
     Ok(())
@@ -255,6 +271,14 @@ fn valid_terminal_id(value: &str) -> bool {
                 .bytes()
                 .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     })
+}
+
+fn valid_state_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
 }
 
 fn valid_opaque_id(value: &str) -> bool {
