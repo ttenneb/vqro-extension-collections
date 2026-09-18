@@ -1,17 +1,20 @@
-//! Native-testable dispatcher. Rendering reads snapshots; action planning performs no host calls.
+//! Native-testable dispatcher with bounded profile reads and one-read typed action planning.
 
 use crate::action::{self, ActionError};
 use crate::policy::{decode_namespace, NAMESPACE as POLICY_NAMESPACE};
+#[cfg(test)]
+use crate::projection::{project, HostDocument, MAX_DOCUMENT_BYTES};
 use crate::projection::{
-    project, valid_producer, valid_scope, HostDocument, ProjectionError, RenderParams,
-    StateSnapshot, TerminalSnapshot, MAX_DOCUMENT_BYTES, MAX_SNAPSHOT_BYTES,
-    MAX_STATE_SNAPSHOT_BYTES,
+    valid_producer, valid_scope, ProjectionError, RenderParams, StateSnapshot, TerminalSnapshot,
+    MAX_SNAPSHOT_BYTES, MAX_STATE_SNAPSHOT_BYTES,
 };
+use crate::r0;
 use serde::{Deserialize, Serialize};
 use serde_json::value::RawValue;
 use sha2::{Digest, Sha256};
 
 pub const SERVICE_ID: &str = "collections";
+#[cfg(test)]
 pub const METHOD: &str = "host.document.render";
 pub const PACKAGE_ID: &str = "vqro.collections";
 pub const NAMESPACE: &str = "vqro.collections";
@@ -128,19 +131,11 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
     let request: RuntimeRequest =
         serde_json::from_slice(request_bytes).map_err(|_| InvokeError::InvalidRequest)?;
     validate_envelope(&request)?;
-    if request.method == action::METHOD {
-        if bridge.cancelled() {
-            return Err(InvokeError::Cancelled);
-        }
-        let plan = action::plan(request.params.get().as_bytes(), request.identity.generation)
-            .map_err(|error| match error {
-                ActionError::Invalid => InvokeError::InvalidRequest,
-                ActionError::Stale => InvokeError::Stale,
-                ActionError::Revoked => InvokeError::Revoked,
-            })?;
-        return canonical_json_bytes(&plan).map_err(|_| InvokeError::InvalidDocument);
-    }
-    let params = validate_render_request(&request)?;
+    let params = if request.method == action::METHOD {
+        None
+    } else {
+        Some(validate_render_request(&request)?)
+    };
 
     if bridge.cancelled() {
         return Err(InvokeError::Cancelled);
@@ -177,6 +172,14 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
         return Err(InvokeError::InvalidSnapshot);
     }
     let policies = decode_namespace(&state.values).map_err(|_| InvokeError::InvalidSnapshot)?;
+    if request.method == action::METHOD {
+        let plan =
+            action::plan(request.params.get().as_bytes(), &state).map_err(|error| match error {
+                ActionError::Invalid => InvokeError::InvalidRequest,
+                ActionError::Stale => InvokeError::Stale,
+            })?;
+        return encode_bounded(&plan);
+    }
     if bridge.cancelled() {
         return Err(InvokeError::Cancelled);
     }
@@ -196,14 +199,26 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
         &request.identity,
         MAX_SNAPSHOT_BYTES,
     )?;
-    let document = project(params, &state, &policies, &snapshot).map_err(map_projection_error)?;
-    encode_document(&document)
+    let params = params.expect("non-action methods have validated render params");
+    #[cfg(test)]
+    if request.method == METHOD {
+        let document =
+            project(params, &state, &policies, &snapshot).map_err(map_projection_error)?;
+        return encode_document(&document);
+    }
+    let profile =
+        r0::project_profile(params, &state, &policies, &snapshot).map_err(map_projection_error)?;
+    if request.method == r0::PROFILE_METHOD {
+        encode_bounded(&profile)
+    } else {
+        encode_bounded(&r0::declare_actions(&profile))
+    }
 }
 
 fn validate_envelope(request: &RuntimeRequest) -> Result<(), InvokeError> {
     let identity = &request.identity;
     if request.contract != SERVICE_CONTRACT
-        || !matches!(request.method.as_str(), METHOD | action::METHOD)
+        || !supported_method(&request.method)
         || identity.package_id != PACKAGE_ID
         || identity.namespace != NAMESPACE
         || identity.service_id != SERVICE_ID
@@ -217,9 +232,26 @@ fn validate_envelope(request: &RuntimeRequest) -> Result<(), InvokeError> {
     Ok(())
 }
 
+fn supported_method(method: &str) -> bool {
+    let supported = matches!(
+        method,
+        r0::PROFILE_METHOD | r0::ACTIONS_METHOD | action::METHOD
+    );
+    #[cfg(test)]
+    let supported = supported || method == METHOD;
+    supported
+}
+
+fn render_method(method: &str) -> bool {
+    let supported = matches!(method, r0::PROFILE_METHOD | r0::ACTIONS_METHOD);
+    #[cfg(test)]
+    let supported = supported || method == METHOD;
+    supported
+}
+
 fn validate_render_request(request: &RuntimeRequest) -> Result<RenderParams, InvokeError> {
     let identity = &request.identity;
-    if request.params.get().len() > 2_048 || request.method != METHOD {
+    if request.params.get().len() > 2_048 || !render_method(&request.method) {
         return Err(InvokeError::InvalidRequest);
     }
     let params: RenderParams =
@@ -310,6 +342,15 @@ fn valid_state_identifier(value: &str, require_dot: bool) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
 }
 
+fn encode_bounded(value: &impl Serialize) -> Result<Vec<u8>, InvokeError> {
+    let bytes = canonical_json_bytes(value).map_err(|_| InvokeError::InvalidDocument)?;
+    if bytes.len() > MAX_FRAME_BYTES {
+        return Err(InvokeError::InvalidDocument);
+    }
+    Ok(bytes)
+}
+
+#[cfg(test)]
 fn encode_document(document: &HostDocument) -> Result<Vec<u8>, InvokeError> {
     let bytes = canonical_json_bytes(document).map_err(|_| InvokeError::InvalidDocument)?;
     if bytes.len() > MAX_DOCUMENT_BYTES {

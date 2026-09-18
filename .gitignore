@@ -1,4 +1,5 @@
 .DS_Store
 *.tmp
-/dist/
+/dist/*
+!/dist/vqro-collections.vqrox
 /target/

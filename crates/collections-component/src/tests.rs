@@ -283,6 +283,29 @@ fn mixed_snapshot() -> TerminalSnapshot {
     ])
 }
 
+fn r0_request(method: &str) -> Value {
+    let mut request = request_value();
+    request["method"] = Value::String(method.into());
+    request["params"]["scope"] = json!({"contract": "host.tab.v1", "scope_id": TAB});
+    request
+}
+
+#[test]
+fn r0_profile_and_actions_use_snapshot_workers_not_render_state() {
+    let mut profile_bridge = Bridge::new(Reply::Snapshot(mixed_snapshot()));
+    let profile = invoke(&mut profile_bridge, &r0_request(crate::r0::PROFILE_METHOD)).unwrap();
+    assert_eq!(profile["contract"], crate::r0::PROFILE_CONTRACT);
+    assert_eq!(profile["collections"].as_array().unwrap().len(), 2);
+    assert_eq!(profile["document"]["roots"].as_array().unwrap().len(), 2);
+    assert_eq!(profile_bridge.calls.len(), 2);
+
+    let mut actions_bridge = Bridge::new(Reply::Snapshot(mixed_snapshot()));
+    let actions = invoke(&mut actions_bridge, &r0_request(crate::r0::ACTIONS_METHOD)).unwrap();
+    assert_eq!(actions["contract"], crate::r0::ACTIONS_CONTRACT);
+    assert_eq!(actions["actions"].as_array().unwrap().len(), 3);
+    assert_eq!(actions_bridge.calls.len(), 2);
+}
+
 #[test]
 fn mixed_empty_and_selection_golden() {
     let snapshot = mixed_snapshot();

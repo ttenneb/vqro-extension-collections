@@ -1,9 +1,9 @@
 //! External Collections component: deterministic projection and effect planning only.
 
 pub mod action;
-pub mod migration;
 pub mod policy;
 pub mod projection;
+pub mod r0;
 pub mod service;
 
 #[cfg(target_arch = "wasm32")]
@@ -35,7 +35,11 @@ mod guest {
         fn descriptor() -> Result<ServiceDescriptor, ServiceError> {
             Ok(ServiceDescriptor {
                 service_id: crate::service::SERVICE_ID.into(),
-                methods: vec![crate::service::METHOD.into(), crate::action::METHOD.into()],
+                methods: vec![
+                    crate::r0::PROFILE_METHOD.into(),
+                    crate::r0::ACTIONS_METHOD.into(),
+                    crate::action::METHOD.into(),
+                ],
             })
         }
 

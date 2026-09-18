@@ -1,140 +1,123 @@
-//! Pure package-owned document-action planner. It emits data; it never executes effects.
+//! Typed R0 Collections action planner. It emits one package-state CAS and executes no effect.
 
-use crate::policy::{decode_policy_bytes, decode_policy_value, PolicyRecord, NAMESPACE};
-use crate::projection::{state_dependency_identity, DocumentDependency};
+use crate::policy::{decode_policy_value, PolicyRecord, NAMESPACE};
+use crate::projection::StateSnapshot;
 use serde::{Deserialize, Serialize};
-use serde_json::{value::RawValue, Value};
+use serde_json::Value;
 use std::collections::BTreeSet;
 
-pub const METHOD: &str = "host.document.action.invoke";
-pub const CONTRACT: &str = "vqro.collections.document-action.v1";
-pub const EFFECT_PLAN_CONTRACT: &str = "vqro.effect-plan.v1";
-pub const LABEL_ACTION: &str = "vqro.collections.label.set";
-pub const ARCHIVE_ACTION: &str = "vqro.collections.terminal.archive";
-pub const UNARCHIVE_ACTION: &str = "vqro.collections.terminal.unarchive";
-const MAX_PAYLOAD_BYTES: usize = 8 * 1024;
-const MAX_PARAMS_BYTES: usize = 192 * 1024;
-const MAX_DEPENDENCIES: usize = 64;
-const MAX_EFFECT_PLAN_BYTES: usize = 128 * 1024;
+pub const METHOD: &str = "vqro.collections.action.plan.v1";
+pub const INVOCATION_CONTRACT: &str = "vqro.collections.action-invocation.v1";
+pub const EFFECT_PLAN_CONTRACT: &str = "vqro.collections.effect-plan.v1";
+const MAX_INVOCATION_BYTES: usize = 32 * 1024;
+const MAX_EFFECT_PLAN_BYTES: usize = 32 * 1024;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ActionParams {
+pub struct ActionInvocation {
     pub contract: String,
-    pub package_id: String,
-    pub service_id: String,
-    pub document_id: String,
+    pub ticket: String,
+    pub idempotency_key: String,
+    pub document_revision: u64,
+    pub actions_revision: u64,
     pub action_id: String,
-    pub payload: Box<RawValue>,
-    pub observed_dependencies: Vec<DocumentDependency>,
-    pub authority_generation: u64,
-    pub state: ActionState,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ActionState {
-    pub namespace: String,
-    pub store_id: String,
-    pub store_generation: u64,
-    pub revision: u64,
-    pub key: String,
-    /// `null` means the key was absent. Objects are decoded from their raw bytes
-    /// so duplicate fields cannot be collapsed before policy validation.
-    pub value: Box<RawValue>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct EffectPlanV1 {
-    pub contract: &'static str,
-    pub package_id: &'static str,
-    pub service_id: &'static str,
-    pub document_id: String,
-    pub action_id: String,
-    pub authority_generation: u64,
-    pub preconditions: Preconditions,
-    pub effects: Vec<StateCasEffect>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Preconditions {
-    pub authority_generation: u64,
-    pub observed_dependencies: Vec<DocumentDependency>,
-    pub state_namespace: &'static str,
-    pub state_store_id: String,
-    pub state_store_generation: u64,
-    pub state_revision: u64,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StateCasEffect {
-    pub kind: &'static str,
-    pub namespace: &'static str,
-    pub key: String,
     pub expected_store_generation: u64,
-    pub expected_revision: u64,
-    pub expected_value: Value,
-    pub value: Value,
+    pub expected_namespace_revision: u64,
+    pub dependency: ActionDependency,
+    pub input: ActionInput,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActionDependency {
+    Container {
+        container_id: String,
+    },
+    TerminalMembership {
+        container_id: String,
+        terminal_id: String,
+        terminal_snapshot_fingerprint_sha256: String,
+        provider_generation: u64,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ActionInput {
+    SetLabel {
+        container_id: String,
+        #[serde(default)]
+        label: Option<String>,
+    },
+    SetArchived {
+        container_id: String,
+        terminal_id: String,
+        archived: bool,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectPlan {
+    pub contract: &'static str,
+    pub ticket: String,
+    pub idempotency_key: String,
+    pub expected_store_generation: u64,
+    pub expected_namespace_revision: u64,
+    pub state: StateCas,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct StateCas {
+    pub key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Value>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ActionError {
     Invalid,
     Stale,
-    Revoked,
 }
 
-pub fn plan(params_bytes: &[u8], runtime_generation: u64) -> Result<EffectPlanV1, ActionError> {
-    if params_bytes.len() > MAX_PARAMS_BYTES {
+pub fn plan(invocation_bytes: &[u8], state: &StateSnapshot) -> Result<EffectPlan, ActionError> {
+    if invocation_bytes.len() > MAX_INVOCATION_BYTES {
         return Err(ActionError::Invalid);
     }
-    let params: ActionParams =
-        serde_json::from_slice(params_bytes).map_err(|_| ActionError::Invalid)?;
-    validate_fence(&params, runtime_generation)?;
+    let invocation: ActionInvocation =
+        serde_json::from_slice(invocation_bytes).map_err(|_| ActionError::Invalid)?;
+    let container_id = validate(&invocation)?;
+    if state.contract != "host.state.v1"
+        || state.namespace != NAMESPACE
+        || state.store_generation != invocation.expected_store_generation
+        || state.revision != invocation.expected_namespace_revision
+    {
+        return Err(ActionError::Stale);
+    }
 
-    let (current, expected_value) = if params.state.value.get() == "null" {
-        (None, Value::Null)
+    let current = match state.values.get(&container_id) {
+        Some(value) => {
+            Some(decode_policy_value(&container_id, value).map_err(|_| ActionError::Invalid)?)
+        }
+        None => None,
+    };
+    let updated = update(&invocation.input, &container_id, current)?;
+    let value = if updated.label.is_none() && updated.archived_terminal_ids.is_empty() {
+        None
     } else {
-        let (record, value) =
-            decode_policy_bytes(&params.state.key, params.state.value.get().as_bytes())
-                .map_err(|_| ActionError::Invalid)?;
-        (Some(record), value)
+        Some(serde_json::to_value(updated).map_err(|_| ActionError::Invalid)?)
     };
-    let updated = update(
-        &params.action_id,
-        params.payload.get().as_bytes(),
-        &params.state.key,
-        current,
-    )?;
-    let updated_value = serde_json::to_value(updated).map_err(|_| ActionError::Invalid)?;
-    let effect = StateCasEffect {
-        kind: "state.cas",
-        namespace: NAMESPACE,
-        key: params.state.key.clone(),
-        expected_store_generation: params.state.store_generation,
-        expected_revision: params.state.revision,
-        expected_value,
-        value: updated_value,
-    };
-    let plan = EffectPlanV1 {
+    let plan = EffectPlan {
         contract: EFFECT_PLAN_CONTRACT,
-        package_id: "vqro.collections",
-        service_id: "collections",
-        document_id: params.document_id,
-        action_id: params.action_id,
-        authority_generation: params.authority_generation,
-        preconditions: Preconditions {
-            authority_generation: params.authority_generation,
-            observed_dependencies: params.observed_dependencies,
-            state_namespace: NAMESPACE,
-            state_store_id: params.state.store_id,
-            state_store_generation: params.state.store_generation,
-            state_revision: params.state.revision,
+        ticket: invocation.ticket,
+        idempotency_key: invocation.idempotency_key,
+        expected_store_generation: invocation.expected_store_generation,
+        expected_namespace_revision: invocation.expected_namespace_revision,
+        state: StateCas {
+            key: container_id,
+            value,
         },
-        effects: vec![effect],
     };
     if serde_json::to_vec(&plan).map_or(true, |bytes| bytes.len() > MAX_EFFECT_PLAN_BYTES) {
         return Err(ActionError::Invalid);
@@ -142,159 +125,116 @@ pub fn plan(params_bytes: &[u8], runtime_generation: u64) -> Result<EffectPlanV1
     Ok(plan)
 }
 
-fn validate_fence(params: &ActionParams, runtime_generation: u64) -> Result<(), ActionError> {
-    if params.authority_generation == 0 || params.authority_generation != runtime_generation {
-        return Err(ActionError::Revoked);
-    }
-    if params.contract != CONTRACT
-        || params.package_id != "vqro.collections"
-        || params.service_id != "collections"
-        || params.state.namespace != NAMESPACE
-        || !valid_state_id(&params.state.store_id)
-        || params.state.store_generation == 0
-        || !valid_opaque_id(&params.document_id)
-        || !valid_container_id(&params.state.key)
-        || params.payload.get().len() > MAX_PAYLOAD_BYTES
-        || params.observed_dependencies.is_empty()
-        || params.observed_dependencies.len() > MAX_DEPENDENCIES
-        || params
-            .observed_dependencies
-            .windows(2)
-            .any(|pair| pair[0] >= pair[1])
-        || params.observed_dependencies.iter().any(|dependency| {
-            !valid_contract(&dependency.contract)
-                || !valid_opaque_id(&dependency.scope_id)
-                || dependency.revision == 0
-                || dependency.generation == 0
-        })
+fn validate(invocation: &ActionInvocation) -> Result<String, ActionError> {
+    if invocation.contract != INVOCATION_CONTRACT
+        || !valid_opaque(&invocation.ticket)
+        || !valid_opaque(&invocation.idempotency_key)
+        || !valid_opaque(&invocation.action_id)
+        || invocation.document_revision == 0
+        || invocation.actions_revision == 0
+        || invocation.expected_store_generation == 0
     {
         return Err(ActionError::Invalid);
     }
-    let expected_revision = params
-        .state
-        .revision
-        .checked_add(1)
-        .ok_or(ActionError::Invalid)?;
-    let expected_dependency = state_dependency_identity(
-        &params.state.store_id,
-        &params.state.namespace,
-        expected_revision,
-        params.state.store_generation,
-    );
-    let state_dependencies = params
-        .observed_dependencies
-        .iter()
-        .filter(|dependency| dependency.contract == "host.state.v1")
-        .collect::<Vec<_>>();
-    if state_dependencies.len() != 1 || *state_dependencies[0] != expected_dependency {
-        return Err(ActionError::Stale);
+    match (&invocation.input, &invocation.dependency) {
+        (
+            ActionInput::SetLabel {
+                container_id,
+                label,
+            },
+            ActionDependency::Container {
+                container_id: dependency_container,
+            },
+        ) if container_id == dependency_container
+            && valid_container_id(container_id)
+            && invocation.action_id == format!("set-label:{container_id}")
+            && label.as_ref().is_none_or(|label| {
+                label.len() <= 4096 && !label.chars().any(char::is_control)
+            }) =>
+        {
+            Ok(container_id.clone())
+        }
+        (
+            ActionInput::SetArchived {
+                container_id,
+                terminal_id,
+                ..
+            },
+            ActionDependency::TerminalMembership {
+                container_id: dependency_container,
+                terminal_id: dependency_terminal,
+                terminal_snapshot_fingerprint_sha256,
+                provider_generation,
+            },
+        ) if container_id == dependency_container
+            && terminal_id == dependency_terminal
+            && valid_container_id(container_id)
+            && valid_terminal_id(terminal_id)
+            && invocation.action_id == format!("set-archived:{terminal_id}")
+            && lower_hex(terminal_snapshot_fingerprint_sha256, 64)
+            && *provider_generation > 0 =>
+        {
+            Ok(container_id.clone())
+        }
+        _ => Err(ActionError::Invalid),
     }
-    Ok(())
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LabelPayload {
-    container_id: String,
-    label: Value,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct TerminalPayload {
-    container_id: String,
-    terminal_id: String,
 }
 
 fn update(
-    action_id: &str,
-    payload_bytes: &[u8],
-    state_key: &str,
+    input: &ActionInput,
+    container_id: &str,
     current: Option<PolicyRecord>,
 ) -> Result<PolicyRecord, ActionError> {
-    let mut record = current.unwrap_or_else(|| PolicyRecord::empty(state_key));
-    match action_id {
-        LABEL_ACTION => {
-            let payload: LabelPayload =
-                serde_json::from_slice(payload_bytes).map_err(|_| ActionError::Invalid)?;
-            if payload.container_id != state_key {
-                return Err(ActionError::Invalid);
-            }
-            record.label = match payload.label {
-                Value::Null => None,
-                Value::String(label) if label.len() <= 4096 => Some(label),
-                _ => return Err(ActionError::Invalid),
-            };
-        }
-        ARCHIVE_ACTION | UNARCHIVE_ACTION => {
-            let payload: TerminalPayload =
-                serde_json::from_slice(payload_bytes).map_err(|_| ActionError::Invalid)?;
-            if payload.container_id != state_key || !valid_terminal_id(&payload.terminal_id) {
-                return Err(ActionError::Invalid);
-            }
+    let mut record = current.unwrap_or_else(|| PolicyRecord::empty(container_id));
+    match input {
+        ActionInput::SetLabel { label, .. } => record.label.clone_from(label),
+        ActionInput::SetArchived {
+            terminal_id,
+            archived,
+            ..
+        } => {
             let mut ids = record
                 .archived_terminal_ids
                 .into_iter()
                 .collect::<BTreeSet<_>>();
-            if action_id == ARCHIVE_ACTION {
-                ids.insert(payload.terminal_id);
+            if *archived {
+                ids.insert(terminal_id.clone());
             } else {
-                ids.remove(&payload.terminal_id);
+                ids.remove(terminal_id);
             }
             if ids.len() > 64 {
                 return Err(ActionError::Invalid);
             }
             record.archived_terminal_ids = ids.into_iter().collect();
         }
-        _ => return Err(ActionError::Invalid),
     }
-    // Reuse the production decoder as the final canonical state invariant.
     let value = serde_json::to_value(&record).map_err(|_| ActionError::Invalid)?;
-    decode_policy_value(state_key, &value).map_err(|_| ActionError::Invalid)
+    decode_policy_value(container_id, &value).map_err(|_| ActionError::Invalid)
 }
 
-fn valid_container_id(value: &str) -> bool {
-    let Some(hex) = value.strip_prefix("container_") else {
-        return false;
-    };
-    hex.len() == 16
-        && hex
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        && u64::from_str_radix(hex, 16).is_ok_and(|raw| raw != 0 && raw != u64::MAX)
-}
-
-fn valid_terminal_id(value: &str) -> bool {
-    value.strip_prefix("term_").is_some_and(|hex| {
-        hex.len() == 32
-            && hex
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    })
-}
-
-fn valid_state_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 128
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-' | b':'))
-}
-
-fn valid_opaque_id(value: &str) -> bool {
-    (1..=128).contains(&value.len())
+fn valid_opaque(value: &str) -> bool {
+    (1..=256).contains(&value.len())
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._:/-".contains(&byte))
 }
 
-fn valid_contract(value: &str) -> bool {
-    value.len() <= 128
-        && value.split('.').count() >= 2
-        && value.split('.').all(|part| {
-            !part.is_empty()
-                && part
-                    .bytes()
-                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
-        })
+fn valid_container_id(value: &str) -> bool {
+    value.strip_prefix("container_").is_some_and(|hex| {
+        lower_hex(hex, 16)
+            && u64::from_str_radix(hex, 16).is_ok_and(|raw| raw != 0 && raw != u64::MAX)
+    })
+}
+
+fn valid_terminal_id(value: &str) -> bool {
+    value
+        .strip_prefix("term_")
+        .is_some_and(|hex| lower_hex(hex, 32))
+}
+
+fn lower_hex(value: &str, length: usize) -> bool {
+    value.len() == length
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }

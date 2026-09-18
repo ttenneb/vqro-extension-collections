@@ -46,7 +46,8 @@ jobs:
           root = pathlib.Path(os.environ["RUNNER_TEMP"])
           a = (root / "a.vqrox").read_bytes()
           b = (root / "b.vqrox").read_bytes()
-          assert a == b, "clean package bytes differ"
+          committed = pathlib.Path("source-a/dist/vqro-collections.vqrox").read_bytes()
+          assert a == b == committed, "clean package bytes differ from each other or committed artifact"
           print(hashlib.sha256(a).hexdigest())
           PY
       - name: Two clean distinct-path builds (Windows)
@@ -71,10 +72,12 @@ jobs:
           Pop-Location
           $itemA = Get-Item $packageA
           $itemB = Get-Item $packageB
+          $committed = Join-Path (Resolve-Path source-a) 'dist/vqro-collections.vqrox'
           $hashA = (Get-FileHash -Algorithm SHA256 $packageA).Hash
           $hashB = (Get-FileHash -Algorithm SHA256 $packageB).Hash
-          if ($itemA.Length -ne $itemB.Length -or $hashA -ne $hashB) {
-            throw 'clean package bytes or hashes differ'
+          $hashCommitted = (Get-FileHash -Algorithm SHA256 $committed).Hash
+          if ($itemA.Length -ne $itemB.Length -or $hashA -ne $hashB -or $hashA -ne $hashCommitted) {
+            throw 'clean package bytes differ from each other or committed artifact'
           }
           $hashA.ToLowerInvariant()
       - name: Linux import and authority inspection

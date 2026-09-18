@@ -1,72 +1,43 @@
-# Host integration test specification
+# Host integration gate
 
-This is a host-side follow-up specification only. This repository must not
-modify or import the Vqro repository. The candidate remains provisional and
-unpublished until an authoritative gate passes against Vqro integrated commit
-`976bb81c66354e36625c7b189f7212b6917ea2ec` (or an explicitly reviewed
-successor preserving the copied public contracts and composite staged gate).
+This package is independently buildable. Production admission still requires a host-side test at an
+explicit Vqro revision preserving the copied R0 contracts.
 
-## Fixture
+## Artifact fixture
 
-1. Run `cargo run --locked -p xtask -- package` twice from distinct clean
-   source paths and `CARGO_TARGET_DIR` values and require identical bytes and
-   the hardcoded reviewed package digest.
-2. Copy the `.vqrox` into a private host test directory and confirm its package,
-   manifest, component, and carried-contract SHA-256 values against the
-   hardcoded reviewed values.
-3. Do not add it to the production catalog or enable production discovery.
+1. Build `dist/vqro-collections.vqrox` twice from clean source and target directories.
+2. Require identical bytes and the hardcoded reviewed package digest.
+3. Verify the package, manifest, component, and every carried contract digest.
+4. Bind curated test provenance to the exact repository, 40-character commit, archive path, and
+   three artifact digests. Curated status alone grants no runtime or feature authority.
 
 ## Required assertions
 
-1. **Package:** validation accepts ID/namespace `vqro.collections`, version
-   `0.0.0`, service `collections`, component world
-   `vqro:extension/service@1.0.0`, provides exactly `host_document`, and grants
-   exactly `host.state.read` and `host.terminals.read`. Ordinary local-file provenance still rejects
-   the reserved `vqro.*` claim; test-only curated provenance binds the exact
-   repository, commit, package, and manifest digests.
-2. **Runtime surface:** descriptor is exactly service `collections`, methods
-   `["host.document.render", "host.document.action.invoke"]`. Instantiation needs no WASI, filesystem,
-   network, environment, clock, random, process, or executable lookup.
-3. **Read-only calls:** for a valid host-authored render request, record exactly
-   one depth-1 `state.snapshot` call with capability `host.state.read` and params
-   `{ "contract": "host.state.v1" }`, followed by exactly one depth-1
-   `terminals.snapshot` call with capability `host.terminals.read` and params
-   `{ "contract": "host.terminals.v1" }`. Both copy identity and namespace.
-   Require byte-exact canonical JSON. No retry, write, action, effect, focus, or
-   log call is permitted.
-4. **Projection:** exercise mixed tiled/container topology, empty containers,
-   selection, empty and maximum snapshots. Reconcile only package label/archive
-   policy while preserving terminal topology. Require sorted normative state and terminal
-   dependencies, top-level producer/scope/revision echo, stable local node IDs,
-   preserved ordering, exact terminal coverage, and byte-identical repeated
-   output. Assert no pane, geometry, selection, action, or effect field appears.
-5. **Rejection:** cover every outer identity/contract/fence mismatch, unknown
-   field, malformed response envelope, host error, malformed snapshot,
-   legacy `host_call_response` and arbitrary response discriminators,
-   fingerprint mismatch, duplicate/missing terminal, invalid selection,
-   topology/document/text/encoded bound, graph, and dependency error. Invalid
-   requests and pre-call cancellation make zero calls; all post-admission paths
-   make at most two, with failures stopping the sequence. Post-call cancellation wins.
-   Returned service errors are static and contain no payload text.
-6. **Action planning:** invoke all three package action IDs and require zero host
-   calls, strict payload/current-state decoding, exact generation/dependency/state
-   preconditions, and exactly one whole-value `vqro.collections` `state.cas`.
-   Stale state dependency and revoked generation fail closed. The host must not
-   execute a plan after any precondition changes. Applying the planned value and
-   rerendering must produce the pinned deterministic label/archive projection.
-   Do not infer an action attachment field: the pinned `host.document.v2` rejects
-   one, and terminal navigation remains host-owned.
-7. **Migration:** run the pure pinned legacy fixture adapter twice, require the
-   same values/source digest/generation/marker, and journal/rollback only in a
-   host-owned test transaction. The component performs no migration write.
-8. **Artifact binding and mutation rejection:** mutate the archive, manifest,
-   copied contract, or extracted component and require rejection before
-   component execution. Revoke or stale any generation/fence and require the
-   authoritative host gate to reject acceptance.
+1. **Package:** ID/namespace `vqro.collections`, version `1.0.0`, service `collections`, world
+   `vqro:extension/service@1.0.0`, provides `host_document`, and capabilities exactly
+   `host.state.read` plus `host.terminals.read`.
+2. **Runtime:** descriptor service `collections`; methods exactly
+   `vqro.collections.document-profile.render.v1`, `vqro.collections.actions.list.v1`, and
+   `vqro.collections.action.plan.v1`; no ambient WASI imports.
+3. **Profile reads:** profile and action-list methods each make one depth-1 `state.snapshot` followed
+   by one depth-1 `terminals.snapshot`, with exact capability/method/namespace/identity envelopes.
+   There is no retry and no render-loop call.
+4. **Profile:** require one root per neutral container, no tiled roots, canonical Collection/archive/
+   terminal node IDs, exact terminal coverage, ordered active/archive partitions, exact optional
+   label sidecar, sorted state/terminal dependencies, and deterministic bytes.
+5. **Declarations:** require one `set_label` per root and one `set_archived` per terminal slot, with
+   exact typed subjects and profile revision binding.
+6. **Action plan:** make one state snapshot call; require exact expected state versions, typed
+   action-specific dependency, opaque ticket/idempotency echo, and one container-key set-or-delete.
+   The component receives no write capability and never executes the plan.
+7. **Rejection:** unknown fields, malformed identities, response envelopes, snapshots, fingerprints,
+   policy, dependencies, controls, bounds, stale state, cross-subject action IDs, cancellation, and
+   replaced generations fail closed with static errors and bounded call counts.
+8. **Host audit:** validate the profile and declarations with the host R0 validators; compare both
+   generation-1 compatibility projections to the frozen fixtures; reject stale/canceled completion.
+9. **Artifact binding:** any archive, manifest, carried contract, or component mutation fails before
+   component execution.
 
-The checked-in host golden documents and host-source-confirmed fingerprint
-vector provide DTO/validator compatibility evidence only. Passing local source
-and fixture checks is not a substitute for this final host execution and
-acceptance gate. Passing that gate activates no persistence, endpoint,
-render-loop work, effect execution, mutation, migration cutover, or publication;
-those remain out of scope.
+Passing this gate does not perform the authority cutover. R1/R2 still supply bounded workers, read
+leases, nonpublishing admission, and rebuildable shadow evidence before R3 can journal and publish
+package authority.

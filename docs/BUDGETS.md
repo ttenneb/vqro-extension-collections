@@ -1,27 +1,26 @@
-# Projection and effect-plan budgets
+# Profile and typed-plan budgets
 
-The `0.0.0` package is provisional and unpublished. All limits below are
-rejection limits, not truncation targets.
+The exact-Git `1.0.0` package uses rejection limits, never truncation targets.
 
 ## Runtime contract
 
 - runtime request frame: 256 KiB;
-- render parameters: 2 KiB; action parameters: 192 KiB; opaque action payload: 8 KiB;
+- profile/action-list render parameters: 2 KiB; typed action invocation: 32 KiB;
 - request/call and opaque document identifiers: 128 bytes;
 - host response envelope: 256 KiB; state snapshot raw result: 192 KiB;
   terminal snapshot raw result: 64 KiB;
 - layout items: 64; terminals: 32; containers: 32; members/container: 64;
-- render: exactly two sequential attempted host calls, each at depth 1, with one
-  outstanding call; action planning: zero host calls;
+- profile/action-list: exactly two sequential attempted host calls, each at depth 1,
+  with one outstanding call; action planning: exactly one state snapshot call;
 - document encoding: 128 KiB;
 - nodes/roots/group children: 512; dependencies: 64; graph depth: 16;
 - text: 4,096 characters/field; accessibility name: 256;
   accessibility description: 1,024; aggregate text: 65,536.
 
-Action planning accepts at most 64 strictly sorted dependencies and emits one
-whole-value `state.cas` effect. It repeats the exact authority generation,
-dependency vector, namespace, revision, and expected value. The planner does
-not execute effects.
+Action planning validates the typed `container` or `terminal_membership`
+dependency, exact package-state generation/revision, ticket, idempotency key,
+and subject-specific action ID. It emits one bounded set-or-delete package-state
+CAS and never executes it.
 
 The pure document validator also enforces strict dependency ordering, unique
 IDs, complete reachability, acyclicity, single-parent ownership, bounded depth,
@@ -47,8 +46,8 @@ allocation:
 
 Archive inventory, order, tar metadata, file modes, paths, and checksums are
 exact and deterministic. The archive carries the reviewed WIT, schemas,
-provenance, package-owned action schemas/fixtures, host document fixtures, and terminal fingerprint vector under
-`contracts/`. Verification compares hardcoded reviewed SHA-256 values for the
+provenance, frozen R0 profile/action schemas and fixtures, host document fixtures,
+and terminal fingerprint vector under `contracts/`. Verification compares hardcoded reviewed SHA-256 values for the
 whole package, manifest, component, and every carried contract asset; archive
 self-checks alone are insufficient. Component exports are exactly `descriptor`
 and `invoke`. Component imports are exactly the public Vqro host/types interfaces

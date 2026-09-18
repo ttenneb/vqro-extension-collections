@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use wasmparser::{Parser, Payload, Validator, WasmFeatures};
 
-const CONTRACT_FILES: [(&str, &str); 21] = [
+const CONTRACT_FILES: [(&str, &str); 33] = [
     (
         "contracts/vqro-extension-service/world.wit",
         "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf",
@@ -59,52 +59,98 @@ const CONTRACT_FILES: [(&str, &str); 21] = [
     ),
     (
         "contracts/package/README.md",
-        "657bce1dc08287fb7e8df683c10c596ffc0bb867317abbd1ca91ed9137ad8854",
+        "ff3dc63baf00108dc465b30b5adc98d5317de58e494bb74c1cf20f67f741fef2",
     ),
     (
-        "contracts/package/collections-document-action-v1.schema.json",
-        "53eba0c5d593e7e6ef50c98b1d7f9afbda3725959966a8d4089e0e02ea838d4c",
+        "contracts/package/vqro-collections-action-invocation-v1.schema.json",
+        "59ee8f1d359954428038c16f75b8999af7698c6185ed9b71dda806ea20d206e9",
     ),
     (
-        "contracts/package/effect-plan-v1.schema.json",
-        "4d9d02db5e60ad8241185e02566c9ac0778387fcfbe91f743562539e7c094024",
+        "contracts/package/vqro-collections-actions-v1.schema.json",
+        "3078eed5a4b876ad9bb7b462d290924b0b6527ec6be8e7f2c279286e66856f0b",
     ),
     (
-        "contracts/package/collections-migration-v1.schema.json",
-        "b46909f8f84a059e140bfcf367382053a6296f1657545cccac73fe2c177a93e5",
+        "contracts/package/vqro-collections-document-profile-v1.schema.json",
+        "aa77062beecc223ebc6068ede0887406e584dbd1507cb9241eff0e0dd8e30b2a",
     ),
     (
-        "contracts/fixtures/collections-actions/label-invocation.json",
-        "096272d3f6cac1b895a8f5b14acf9d948364c28bffe800cf6ae960840936838f",
+        "contracts/package/vqro-collections-effect-plan-v1.schema.json",
+        "5fadc52b3fff7df6532f6e9603defc27681c57cfe338bc442b5a7de7dbc5bc4f",
     ),
     (
-        "contracts/fixtures/collections-actions/label-effect-plan.json",
-        "b85e5bb40a9b32750bda8add8a46bd3226369bba7b1ae83bc1db51e8a15f2038",
+        "contracts/package/vqro-collections-production-pin-v1.schema.json",
+        "dc4bf74ee492067644db6f24bd39a878efc05afefa6dad39eaf84c9d32ea4923",
     ),
     (
-        "contracts/fixtures/collections-migration/legacy-input.json",
-        "e0bcdfc38775520e5a7a1d1426d07518a6521544975f6f4344946ab8ac4177fd",
+        "contracts/fixtures/vqro-collections-v1/actions-valid.json",
+        "d2c552b9d1afe194b3175e532d85e3747e5a6d1456d8e207a398e8f06b1a4f83",
     ),
     (
-        "contracts/fixtures/collections-migration/migration-plan.json",
-        "fd8220ca6937b7d6aaa6b9c9720b897ce5d793777d42a118c4fd267e398e2abf",
+        "contracts/fixtures/vqro-collections-v1/cancellation-before-commit.json",
+        "7a8ea24cc353e3948926e930b95e15652eb5be43c6d85e54bc172e8839fb4c98",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/document-profile-invalid-root-label.json",
+        "700c92514235523dd369dbea694224a985cc1e70ce57fc7207507726f1f0cf79",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/document-profile-valid.json",
+        "f7aa6ee90235f2dfca26c51cfdbf8cbf0983a8150e11a844494ab347c7b7e182",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/effect-plan-invalid-ticket.json",
+        "8dcc305725af91e0c11c34ec46ab75856c4c8f4ace0106cebcfb4525300e229b",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/effect-plan-valid.json",
+        "206b41ede9eea60a90bd95e6d1be005d2659a291ae265de898c48db92e5e8fd0",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/invocation-set-archived-valid.json",
+        "482dabd84f8d7fae2cd467b4c611fc009ae365312527a091dfcfaf41eb2fb0dc",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/invocation-set-label-invalid-dependency.json",
+        "1606ebb1b96f178d7ee291713eb1e8ad32752ea559854530559921b29e7c4cdb",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/invocation-set-label-valid.json",
+        "cd7342eb41ef1eac2ead785e1eb9deae5d0e74dcaef012ca0c0e9109c2b60cab",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/labeled-create-atomic.json",
+        "12e52bcf4fae8aa160fc30c9f88d257e7f2fc7f465328ecb8a6430e5637b56e4",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/old-reader-rejection-v7.json",
+        "43dd15edc9714593e5c715d7aadd9fff336318ca625b8d3925743a315fbe6bcc",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/package-authority-valid.json",
+        "2e2e66172e9e83e6069590143536fa5ee66b68c6388e0a3eed7be7bb08866850",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/projected-collections-structure-v1.json",
+        "23de8335df296eb59e7f351d45241a2595474285cfe53ec46116552096f8680f",
+    ),
+    (
+        "contracts/fixtures/vqro-collections-v1/projected-host-document-v1.json",
+        "5bc8f5a2be7f6f1ad17601097f25d99209b049383211ed033dc20384a38d8389",
     ),
     (
         "contracts/PROVENANCE.md",
-        "98890cc600ef4a942037909e50018e434d9afa3889d7a25cdde8438790498ee1",
+        "8770c577c3a369219dd7f6b2671a87c2aa9af91a0f4e4834fd60baf2fd1f6b34",
     ),
 ];
 #[cfg(test)]
-const SOURCE_ONLY_PROFILE_FILES: [&str; 7] = [
+const SOURCE_ONLY_PROFILE_FILES: [&str; 5] = [
     "profiles/README.md",
     "profiles/collections-policy-v1.md",
     "profiles/collections-policy-v1.schema.json",
-    "profiles/collections-migration-v1.md",
-    "profiles/fixtures/collections-legacy-v1.json",
     "profiles/fixtures/collections-policy-v1-invalid.json",
     "profiles/fixtures/collections-policy-v1.json",
 ];
-const EXPECTED_PACKAGE_PATHS: [&str; 26] = [
+const EXPECTED_PACKAGE_PATHS: [&str; 38] = [
     "LICENSE",
     "README.md",
     "checksums.sha256",
@@ -115,29 +161,41 @@ const EXPECTED_PACKAGE_PATHS: [&str; 26] = [
     "contracts/api/host-state-v1.schema.json",
     "contracts/api/host-terminals-v1.schema.json",
     "contracts/api/vqro-service-v1.schema.json",
-    "contracts/fixtures/collections-actions/label-effect-plan.json",
-    "contracts/fixtures/collections-actions/label-invocation.json",
-    "contracts/fixtures/collections-migration/legacy-input.json",
-    "contracts/fixtures/collections-migration/migration-plan.json",
     "contracts/fixtures/host-document-v2/invalid-action.json",
     "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
     "contracts/fixtures/host-document-v2/invalid-unreachable.json",
     "contracts/fixtures/host-document-v2/valid.json",
     "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
+    "contracts/fixtures/vqro-collections-v1/actions-valid.json",
+    "contracts/fixtures/vqro-collections-v1/cancellation-before-commit.json",
+    "contracts/fixtures/vqro-collections-v1/document-profile-invalid-root-label.json",
+    "contracts/fixtures/vqro-collections-v1/document-profile-valid.json",
+    "contracts/fixtures/vqro-collections-v1/effect-plan-invalid-ticket.json",
+    "contracts/fixtures/vqro-collections-v1/effect-plan-valid.json",
+    "contracts/fixtures/vqro-collections-v1/invocation-set-archived-valid.json",
+    "contracts/fixtures/vqro-collections-v1/invocation-set-label-invalid-dependency.json",
+    "contracts/fixtures/vqro-collections-v1/invocation-set-label-valid.json",
+    "contracts/fixtures/vqro-collections-v1/labeled-create-atomic.json",
+    "contracts/fixtures/vqro-collections-v1/old-reader-rejection-v7.json",
+    "contracts/fixtures/vqro-collections-v1/package-authority-valid.json",
+    "contracts/fixtures/vqro-collections-v1/projected-collections-structure-v1.json",
+    "contracts/fixtures/vqro-collections-v1/projected-host-document-v1.json",
     "contracts/package/README.md",
-    "contracts/package/collections-document-action-v1.schema.json",
-    "contracts/package/collections-migration-v1.schema.json",
-    "contracts/package/effect-plan-v1.schema.json",
+    "contracts/package/vqro-collections-action-invocation-v1.schema.json",
+    "contracts/package/vqro-collections-actions-v1.schema.json",
+    "contracts/package/vqro-collections-document-profile-v1.schema.json",
+    "contracts/package/vqro-collections-effect-plan-v1.schema.json",
+    "contracts/package/vqro-collections-production-pin-v1.schema.json",
     "contracts/vqro-extension-service/world.wit",
     "services/collections.wasm",
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "d6aace91eeb892deff3ae4de7ef49bc5027c5676f0f55ab068445a3fcdc13210";
+    "067726c3ab83b44485a28926a1fd485a9ab05d1bd807382e6388fb5457299676";
 const EXPECTED_MANIFEST_SHA256: &str =
-    "1e03800d55f56eb959e9ebdabe6c0cc4380377683c5e2cbf939e792ca8f90304";
+    "34751e197b31206ed2834a6243cd5ae27ecb8e1b44a57bb6594d55f724209385";
 const EXPECTED_COMPONENT_SHA256: &str =
-    "f022298038a8ecf85ebe5e160bdc72702e0e83e29a2540d68bb5a243db980d4b";
+    "a7f4c30b3d01298249a516f6d7f1d813e638c1383eff6435e70e72d6c55b65f7";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -148,7 +206,7 @@ const MAX_CHECKSUM_BYTES: usize = 1024 * 1024;
 const MAX_PATH_BYTES: usize = 512;
 const MAX_PATH_COMPONENT_BYTES: usize = 128;
 const MAX_PATH_DEPTH: usize = 16;
-const PACKAGE_NAME: &str = "vqro-collections-candidate.vqrox";
+const PACKAGE_NAME: &str = "vqro-collections.vqrox";
 const ALLOWED_COMPONENT_IMPORTS: [&str; 4] = [
     "service-descriptor",
     "service-error",
@@ -375,11 +433,12 @@ fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
 
     let manifest_bytes = by_path["vqro-extension.toml"];
     let manifest_digest = sha256(manifest_bytes);
-    if manifest_digest != EXPECTED_MANIFEST_SHA256 {
-        bail!(
-            "manifest digest mismatch: expected {EXPECTED_MANIFEST_SHA256}, got {manifest_digest}"
-        );
-    }
+    verify_reviewed_digest(
+        identity,
+        "manifest",
+        &manifest_digest,
+        EXPECTED_MANIFEST_SHA256,
+    )?;
     let expected_manifest = fs::read(workspace_root().join("vqro-extension.toml"))?;
     if manifest_bytes != expected_manifest {
         bail!("package manifest differs from the reviewed candidate manifest");
@@ -390,7 +449,7 @@ fn verify_package(path: &Path, identity: ArtifactIdentity) -> Result<()> {
         "package_contract = \"vqro.package.v1\"",
         "id = \"vqro.collections\"",
         "id = \"collections\"",
-        "version = \"0.0.0\"",
+        "version = \"1.0.0\"",
         "min_vqro_version = \"0.9.0\"",
         "provides = [\"host_document\"]",
         "capabilities = [\"host.state.read\", \"host.terminals.read\"]",
@@ -504,10 +563,13 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
         bail!("component is missing the collections service marker");
     }
     for marker in [
-        b"host.document.render".as_slice(),
-        b"host.document.action.invoke".as_slice(),
-        b"vqro.effect-plan.v1".as_slice(),
-        b"state.cas".as_slice(),
+        b"vqro.collections.document-profile.render.v1".as_slice(),
+        b"vqro.collections.actions.list.v1".as_slice(),
+        b"vqro.collections.action.plan.v1".as_slice(),
+        b"vqro.collections.document-profile.v1".as_slice(),
+        b"vqro.collections.actions.v1".as_slice(),
+        b"vqro.collections.action-invocation.v1".as_slice(),
+        b"vqro.collections.effect-plan.v1".as_slice(),
         b"host.state.read".as_slice(),
         b"state.snapshot".as_slice(),
         b"host.terminals.read".as_slice(),
@@ -523,6 +585,9 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
         }
     }
     for marker in [
+        b"host.document.action.invoke".as_slice(),
+        b"vqro.effect-plan.v1".as_slice(),
+        b"state.cas".as_slice(),
         b"host.state.write".as_slice(),
         b"state.transact".as_slice(),
         b"host.action".as_slice(),

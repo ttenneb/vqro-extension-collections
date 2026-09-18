@@ -1,9 +1,9 @@
-# Provisional, non-release deterministic plan-only authority candidate. Do not
-# publish before Vqro 0.9.0 or the coordinated authoritative host gate passes.
+# Exact-Git opt-in R0 candidate. Curated discovery does not grant provider or
+# feature authority; Vqro must still admit it through the coordinated host gate.
 manifest_version = 2
 package_contract = "vqro.package.v1"
 id = "vqro.collections"
-version = "0.0.0"
+version = "1.0.0"
 min_vqro_version = "0.9.0"
 namespaces = ["vqro.collections"]
 
