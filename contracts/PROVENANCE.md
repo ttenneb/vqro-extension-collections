@@ -38,6 +38,18 @@ independently fetched at the later public composite-dependency commit recorded
 in their source-path cells; this does not import host implementation code or
 activate the staged gate.
 
+The following are package-owned contracts and fixtures, not Vqro host
+snapshots. They pin this component's TPM-neutral planner boundary and do not
+claim or grant host execution semantics:
+
+| Local path | Ownership | SHA-256 |
+| --- | --- | --- |
+| `package/README.md` | `vqro.collections` package | `d24291ef1cbba033393b1dd7a44b48e8be450d3cbba8f640f3f098f58625e7dd` |
+| `package/collections-document-action-v1.schema.json` | `vqro.collections` package | `92c8858b40995747a234b8ee17149c000244b82d754265373f1b702a467b89b4` |
+| `package/effect-plan-v1.schema.json` | `vqro.collections` package | `929bf84d06d5a707ee5e78dbb1af7b324f0df81088fc9205539a37df9c12bcf1` |
+| `fixtures/collections-actions/label-invocation.json` | `vqro.collections` package | `04b55caf32faaad72c06b44f9f0c538a8aff3c36948c9b999c9c38d8dcb70f69` |
+| `fixtures/collections-actions/label-effect-plan.json` | `vqro.collections` package | `1a92a639ab3a83fedb07be64622bccd24c0dd5189ec66269c314c78d6253fbae` |
+
 `cargo run --locked -p xtask -- contract-check` verifies every listed local
 asset. Packaging carries the same assets and `xtask verify` binds every one to
 its hardcoded digest. The final host execution/acceptance gate remains

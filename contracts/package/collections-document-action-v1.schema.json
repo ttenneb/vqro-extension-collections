@@ -1,0 +1,36 @@
+{
+  "$id": "urn:vqro.collections:document-action:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_id": {"enum": ["vqro.collections.label.set", "vqro.collections.terminal.archive", "vqro.collections.terminal.unarchive"]},
+    "authority_generation": {"minimum": 1, "type": "integer"},
+    "contract": {"const": "vqro.collections.document-action.v1"},
+    "document_id": {"maxLength": 128, "minLength": 1, "type": "string"},
+    "observed_dependencies": {"items": {"$ref": "#/$defs/dependency"}, "maxItems": 64, "minItems": 1, "type": "array"},
+    "package_id": {"const": "vqro.collections"},
+    "payload": true,
+    "service_id": {"const": "collections"},
+    "state": {"$ref": "#/$defs/state"}
+  },
+  "required": ["contract", "package_id", "service_id", "document_id", "action_id", "payload", "observed_dependencies", "authority_generation", "state"],
+  "type": "object",
+  "$defs": {
+    "dependency": {
+      "additionalProperties": false,
+      "properties": {
+        "contract": {"type": "string"}, "generation": {"minimum": 1, "type": "integer"},
+        "revision": {"minimum": 1, "type": "integer"}, "scope_id": {"type": "string"}
+      },
+      "required": ["contract", "scope_id", "revision", "generation"], "type": "object"
+    },
+    "state": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {"pattern": "^container_[0-9a-f]{16}$", "type": "string"},
+        "namespace": {"const": "vqro.collections"}, "revision": {"minimum": 0, "type": "integer"}, "value": true
+      },
+      "required": ["namespace", "revision", "key", "value"], "type": "object"
+    }
+  }
+}

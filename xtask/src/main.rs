@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use wasmparser::{Parser, Payload, Validator, WasmFeatures};
 
-const CONTRACT_FILES: [(&str, &str); 13] = [
+const CONTRACT_FILES: [(&str, &str); 18] = [
     (
         "contracts/vqro-extension-service/world.wit",
         "625f909dcd26c714e94b0361e4c3fde969c792e0497aaf7477e08f4f73f22daf",
@@ -58,19 +58,41 @@ const CONTRACT_FILES: [(&str, &str); 13] = [
         "ace75ef459e96136563ee3cc747d0e2537a8f5cadd0f8af41a95f4ccf3597105",
     ),
     (
+        "contracts/package/README.md",
+        "d24291ef1cbba033393b1dd7a44b48e8be450d3cbba8f640f3f098f58625e7dd",
+    ),
+    (
+        "contracts/package/collections-document-action-v1.schema.json",
+        "92c8858b40995747a234b8ee17149c000244b82d754265373f1b702a467b89b4",
+    ),
+    (
+        "contracts/package/effect-plan-v1.schema.json",
+        "929bf84d06d5a707ee5e78dbb1af7b324f0df81088fc9205539a37df9c12bcf1",
+    ),
+    (
+        "contracts/fixtures/collections-actions/label-invocation.json",
+        "04b55caf32faaad72c06b44f9f0c538a8aff3c36948c9b999c9c38d8dcb70f69",
+    ),
+    (
+        "contracts/fixtures/collections-actions/label-effect-plan.json",
+        "1a92a639ab3a83fedb07be64622bccd24c0dd5189ec66269c314c78d6253fbae",
+    ),
+    (
         "contracts/PROVENANCE.md",
-        "61bb9dab61ac377c971151fea67a7da5b26bd19e44a62aeac67b4317ddbca128",
+        "62f27f1c08dcd9b87d11b9b6b8fd7a4a93b4c108121258be80dfb6e9dafc783d",
     ),
 ];
 #[cfg(test)]
-const SOURCE_ONLY_PROFILE_FILES: [&str; 5] = [
+const SOURCE_ONLY_PROFILE_FILES: [&str; 7] = [
     "profiles/README.md",
     "profiles/collections-policy-v1.md",
     "profiles/collections-policy-v1.schema.json",
+    "profiles/collections-migration-v1.md",
+    "profiles/fixtures/collections-legacy-v1.json",
     "profiles/fixtures/collections-policy-v1-invalid.json",
     "profiles/fixtures/collections-policy-v1.json",
 ];
-const EXPECTED_PACKAGE_PATHS: [&str; 18] = [
+const EXPECTED_PACKAGE_PATHS: [&str; 23] = [
     "LICENSE",
     "README.md",
     "checksums.sha256",
@@ -81,21 +103,26 @@ const EXPECTED_PACKAGE_PATHS: [&str; 18] = [
     "contracts/api/host-state-v1.schema.json",
     "contracts/api/host-terminals-v1.schema.json",
     "contracts/api/vqro-service-v1.schema.json",
+    "contracts/fixtures/collections-actions/label-effect-plan.json",
+    "contracts/fixtures/collections-actions/label-invocation.json",
     "contracts/fixtures/host-document-v2/invalid-action.json",
     "contracts/fixtures/host-document-v2/invalid-unknown-field.json",
     "contracts/fixtures/host-document-v2/invalid-unreachable.json",
     "contracts/fixtures/host-document-v2/valid.json",
     "contracts/fixtures/host-terminals-v1/fingerprint-vector.json",
+    "contracts/package/README.md",
+    "contracts/package/collections-document-action-v1.schema.json",
+    "contracts/package/effect-plan-v1.schema.json",
     "contracts/vqro-extension-service/world.wit",
     "services/collections.wasm",
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "36230691235fe70ef21b06e1d94c98d9888bce68ed4587d3c979bf03f9d2980b";
+    "d482150b9a2d23f918e4a6e0505164c8e4a1db1a554a661f7cc6f0c426632178";
 const EXPECTED_MANIFEST_SHA256: &str =
-    "4d270e2646cde5764260e5781eb837c7964078731fb5981578b1d08e80957034";
+    "1e03800d55f56eb959e9ebdabe6c0cc4380377683c5e2cbf939e792ca8f90304";
 const EXPECTED_COMPONENT_SHA256: &str =
-    "819963c8aeee9d3c5c1ba05cc3b4f6fd73ace14b030ffd55fbd2e1ac95b0c1bc";
+    "1ab4ecb05dd4569fa0c98d9aa5f85bb20ed1773688a2714c8433b04f799fd890";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;
@@ -463,6 +490,9 @@ fn verify_component(bytes: &[u8]) -> Result<()> {
     }
     for marker in [
         b"host.document.render".as_slice(),
+        b"host.document.action.invoke".as_slice(),
+        b"vqro.effect-plan.v1".as_slice(),
+        b"state.cas".as_slice(),
         b"host.state.read".as_slice(),
         b"state.snapshot".as_slice(),
         b"host.terminals.read".as_slice(),

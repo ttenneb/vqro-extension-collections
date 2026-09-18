@@ -1,4 +1,4 @@
-# Provisional, non-release, read-only structural-shadow candidate. Do not
+# Provisional, non-release deterministic plan-only authority candidate. Do not
 # publish before Vqro 0.9.0 or the coordinated authoritative host gate passes.
 manifest_version = 2
 package_contract = "vqro.package.v1"

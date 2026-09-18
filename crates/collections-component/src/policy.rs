@@ -23,6 +23,18 @@ pub struct PolicyRecord {
     pub archived_terminal_ids: Vec<String>,
 }
 
+impl PolicyRecord {
+    pub fn empty(container_id: &str) -> Self {
+        Self {
+            schema: SCHEMA.into(),
+            schema_version: 1,
+            container_id: container_id.into(),
+            label: None,
+            archived_terminal_ids: Vec::new(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PolicyError {
     Invalid,
@@ -51,31 +63,55 @@ pub fn decode_namespace(
         {
             return Err(PolicyError::Invalid);
         }
-        let record: PolicyRecord =
-            serde_json::from_value(value.clone()).map_err(|_| PolicyError::Invalid)?;
-        if record.schema != SCHEMA
-            || record.schema_version != 1
-            || record.container_id != *key
-            || record
-                .label
-                .as_ref()
-                .is_some_and(|label| label.len() > MAX_LABEL_BYTES)
-            || record.archived_terminal_ids.len() > MAX_ARCHIVES
-            || record
-                .archived_terminal_ids
-                .iter()
-                .any(|id| !valid_terminal_id(id))
-            || record
-                .archived_terminal_ids
-                .windows(2)
-                .any(|pair| pair[0] >= pair[1])
-            || serde_json::to_value(&record).map_err(|_| PolicyError::Invalid)? != *value
-        {
-            return Err(PolicyError::Invalid);
-        }
-        records.insert(key.clone(), record);
+        records.insert(key.clone(), decode_policy_value(key, value)?);
     }
     Ok(records)
+}
+
+pub fn decode_policy_bytes(key: &str, bytes: &[u8]) -> Result<(PolicyRecord, Value), PolicyError> {
+    // Decode the typed object first so duplicate known fields fail instead of
+    // being collapsed by an intermediate generic JSON map.
+    let direct: PolicyRecord = serde_json::from_slice(bytes).map_err(|_| PolicyError::Invalid)?;
+    let value: Value = serde_json::from_slice(bytes).map_err(|_| PolicyError::Invalid)?;
+    let validated = decode_policy_value(key, &value)?;
+    if direct != validated {
+        return Err(PolicyError::Invalid);
+    }
+    Ok((validated, value))
+}
+
+pub fn decode_policy_value(key: &str, value: &Value) -> Result<PolicyRecord, PolicyError> {
+    if !valid_container_id(key)
+        || serde_json::to_vec(value)
+            .map_err(|_| PolicyError::Invalid)?
+            .len()
+            > MAX_VALUE_BYTES
+    {
+        return Err(PolicyError::Invalid);
+    }
+    let record: PolicyRecord =
+        serde_json::from_value(value.clone()).map_err(|_| PolicyError::Invalid)?;
+    if record.schema != SCHEMA
+        || record.schema_version != 1
+        || record.container_id != key
+        || record
+            .label
+            .as_ref()
+            .is_some_and(|label| label.len() > MAX_LABEL_BYTES)
+        || record.archived_terminal_ids.len() > MAX_ARCHIVES
+        || record
+            .archived_terminal_ids
+            .iter()
+            .any(|id| !valid_terminal_id(id))
+        || record
+            .archived_terminal_ids
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+        || serde_json::to_value(&record).map_err(|_| PolicyError::Invalid)? != *value
+    {
+        return Err(PolicyError::Invalid);
+    }
+    Ok(record)
 }
 
 pub fn archived(record: Option<&PolicyRecord>, terminal_id: &str) -> bool {

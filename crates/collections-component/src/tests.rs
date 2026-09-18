@@ -5,8 +5,8 @@ use serde_json::{json, Value};
 use sha2::Digest;
 use std::collections::VecDeque;
 
-const TERM1: &str = "term_00000000000000000000000000000001";
-const TERM2: &str = "term_00000000000000000000000000000002";
+pub(crate) const TERM1: &str = "term_00000000000000000000000000000001";
+pub(crate) const TERM2: &str = "term_00000000000000000000000000000002";
 const TAB: &str = "tab_00000000000000000000000000000001";
 
 fn fence() -> LeaseFence {
@@ -20,7 +20,7 @@ fn fence() -> LeaseFence {
     }
 }
 
-fn snapshot(layout: Vec<LayoutItem>) -> TerminalSnapshot {
+pub(crate) fn snapshot(layout: Vec<LayoutItem>) -> TerminalSnapshot {
     let mut value = TerminalSnapshot {
         contract: "host.terminals.v1".into(),
         workspace_id: "w1".into(),
@@ -33,7 +33,7 @@ fn snapshot(layout: Vec<LayoutItem>) -> TerminalSnapshot {
     value
 }
 
-fn state_snapshot() -> StateSnapshot {
+pub(crate) fn state_snapshot() -> StateSnapshot {
     StateSnapshot {
         contract: "host.state.v1".into(),
         store_id: "session:test".into(),
@@ -52,7 +52,7 @@ fn project_default(
     project(params, &state_snapshot(), &Default::default(), snapshot)
 }
 
-fn params() -> RenderParams {
+pub(crate) fn params() -> RenderParams {
     RenderParams {
         contract: "host.document.render.v2".into(),
         producer: ProducerFence {

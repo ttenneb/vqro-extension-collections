@@ -25,7 +25,7 @@ successor preserving the copied public contracts and composite staged gate).
    the reserved `vqro.*` claim; test-only curated provenance binds the exact
    repository, commit, package, and manifest digests.
 2. **Runtime surface:** descriptor is exactly service `collections`, methods
-   `["host.document.render"]`. Instantiation needs no WASI, filesystem,
+   `["host.document.render", "host.document.action.invoke"]`. Instantiation needs no WASI, filesystem,
    network, environment, clock, random, process, or executable lookup.
 3. **Read-only calls:** for a valid host-authored render request, record exactly
    one depth-1 `state.snapshot` call with capability `host.state.read` and params
@@ -48,7 +48,18 @@ successor preserving the copied public contracts and composite staged gate).
    requests and pre-call cancellation make zero calls; all post-admission paths
    make at most two, with failures stopping the sequence. Post-call cancellation wins.
    Returned service errors are static and contain no payload text.
-6. **Artifact binding and mutation rejection:** mutate the archive, manifest,
+6. **Action planning:** invoke all three package action IDs and require zero host
+   calls, strict payload/current-state decoding, exact generation/dependency/state
+   preconditions, and exactly one whole-value `vqro.collections` `state.cas`.
+   Stale state dependency and revoked generation fail closed. The host must not
+   execute a plan after any precondition changes. Applying the planned value and
+   rerendering must produce the pinned deterministic label/archive projection.
+   Do not infer an action attachment field: the pinned `host.document.v2` rejects
+   one, and terminal navigation remains host-owned.
+7. **Migration:** run the pure pinned legacy fixture adapter twice, require the
+   same values/source digest/generation/marker, and journal/rollback only in a
+   host-owned test transaction. The component performs no migration write.
+8. **Artifact binding and mutation rejection:** mutate the archive, manifest,
    copied contract, or extracted component and require rejection before
    component execution. Revoke or stale any generation/fence and require the
    authoritative host gate to reject acceptance.
@@ -57,5 +68,5 @@ The checked-in host golden documents and host-source-confirmed fingerprint
 vector provide DTO/validator compatibility evidence only. Passing local source
 and fixture checks is not a substitute for this final host execution and
 acceptance gate. Passing that gate activates no persistence, endpoint,
-render-loop work, user action, effect, mutation, or publication; those remain
-out of scope.
+render-loop work, effect execution, mutation, migration cutover, or publication;
+those remain out of scope.

@@ -1,0 +1,25 @@
+{
+  "action_id": "vqro.collections.label.set",
+  "authority_generation": 9,
+  "contract": "vqro.effect-plan.v1",
+  "document_id": "collections/current",
+  "effects": [{
+    "expected_revision": 4,
+    "expected_value": null,
+    "key": "container_0000000000000001",
+    "kind": "state.cas",
+    "namespace": "vqro.collections",
+    "value": {"archived_terminal_ids": [], "container_id": "container_0000000000000001", "label": "Ops", "schema": "vqro.collections.policy", "schema_version": 1}
+  }],
+  "package_id": "vqro.collections",
+  "preconditions": {
+    "authority_generation": 9,
+    "observed_dependencies": [
+      {"contract": "host.state.v1", "generation": 7, "revision": 5, "scope_id": "state_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+      {"contract": "host.terminals.v1", "generation": 5, "revision": 1, "scope_id": "tab_00000000000000000000000000000001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+    ],
+    "state_namespace": "vqro.collections",
+    "state_revision": 4
+  },
+  "service_id": "collections"
+}

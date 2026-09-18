@@ -1,0 +1,14 @@
+{
+  "action_id": "vqro.collections.label.set",
+  "authority_generation": 9,
+  "contract": "vqro.collections.document-action.v1",
+  "document_id": "collections/current",
+  "observed_dependencies": [
+    {"contract": "host.state.v1", "generation": 7, "revision": 5, "scope_id": "state_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    {"contract": "host.terminals.v1", "generation": 5, "revision": 1, "scope_id": "tab_00000000000000000000000000000001/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+  ],
+  "package_id": "vqro.collections",
+  "payload": {"container_id": "container_0000000000000001", "label": "Ops"},
+  "service_id": "collections",
+  "state": {"key": "container_0000000000000001", "namespace": "vqro.collections", "revision": 4, "value": null}
+}

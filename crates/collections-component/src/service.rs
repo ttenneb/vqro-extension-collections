@@ -1,5 +1,6 @@
-//! Native-testable service dispatcher with one injectable read-only host bridge.
+//! Native-testable dispatcher. Rendering reads snapshots; action planning performs no host calls.
 
+use crate::action::{self, ActionError};
 use crate::policy::{decode_namespace, NAMESPACE as POLICY_NAMESPACE};
 use crate::projection::{
     project, valid_producer, valid_scope, HostDocument, ProjectionError, RenderParams,
@@ -33,6 +34,8 @@ pub enum InvokeError {
     InvalidHostResponse,
     InvalidSnapshot,
     InvalidDocument,
+    Stale,
+    Revoked,
 }
 
 impl InvokeError {
@@ -44,6 +47,8 @@ impl InvokeError {
             Self::InvalidHostResponse => "invalid_host_response",
             Self::InvalidSnapshot => "invalid_snapshot",
             Self::InvalidDocument => "invalid_document",
+            Self::Stale => "stale",
+            Self::Revoked => "revoked",
         }
     }
 
@@ -55,6 +60,8 @@ impl InvokeError {
             Self::InvalidHostResponse => "host response rejected",
             Self::InvalidSnapshot => "terminal snapshot rejected",
             Self::InvalidDocument => "document rejected",
+            Self::Stale => "observation is stale",
+            Self::Revoked => "authority revoked",
         }
     }
 }
@@ -120,7 +127,20 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
     }
     let request: RuntimeRequest =
         serde_json::from_slice(request_bytes).map_err(|_| InvokeError::InvalidRequest)?;
-    let params = validate_request(&request)?;
+    validate_envelope(&request)?;
+    if request.method == action::METHOD {
+        if bridge.cancelled() {
+            return Err(InvokeError::Cancelled);
+        }
+        let plan = action::plan(request.params.get().as_bytes(), request.identity.generation)
+            .map_err(|error| match error {
+                ActionError::Invalid => InvokeError::InvalidRequest,
+                ActionError::Stale => InvokeError::Stale,
+                ActionError::Revoked => InvokeError::Revoked,
+            })?;
+        return canonical_json_bytes(&plan).map_err(|_| InvokeError::InvalidDocument);
+    }
+    let params = validate_render_request(&request)?;
 
     if bridge.cancelled() {
         return Err(InvokeError::Cancelled);
@@ -180,15 +200,10 @@ pub fn invoke<B: HostBridge>(bridge: &mut B, request_bytes: &[u8]) -> Result<Vec
     encode_document(&document)
 }
 
-fn validate_request(request: &RuntimeRequest) -> Result<RenderParams, InvokeError> {
+fn validate_envelope(request: &RuntimeRequest) -> Result<(), InvokeError> {
     let identity = &request.identity;
-    if request.params.get().len() > 2_048 {
-        return Err(InvokeError::InvalidRequest);
-    }
-    let params: RenderParams =
-        serde_json::from_str(request.params.get()).map_err(|_| InvokeError::InvalidRequest)?;
     if request.contract != SERVICE_CONTRACT
-        || request.method != METHOD
+        || !matches!(request.method.as_str(), METHOD | action::METHOD)
         || identity.package_id != PACKAGE_ID
         || identity.namespace != NAMESPACE
         || identity.service_id != SERVICE_ID
@@ -196,7 +211,20 @@ fn validate_request(request: &RuntimeRequest) -> Result<RenderParams, InvokeErro
         || request.request_id.is_empty()
         || request.request_id.len() > MAX_REQUEST_ID_BYTES
         || !opaque_id(&request.request_id)
-        || params.contract != "host.document.render.v2"
+    {
+        return Err(InvokeError::InvalidRequest);
+    }
+    Ok(())
+}
+
+fn validate_render_request(request: &RuntimeRequest) -> Result<RenderParams, InvokeError> {
+    let identity = &request.identity;
+    if request.params.get().len() > 2_048 || request.method != METHOD {
+        return Err(InvokeError::InvalidRequest);
+    }
+    let params: RenderParams =
+        serde_json::from_str(request.params.get()).map_err(|_| InvokeError::InvalidRequest)?;
+    if params.contract != "host.document.render.v2"
         || params.producer.package_id != PACKAGE_ID
         || params.producer.service_id != SERVICE_ID
         || params.producer.runtime_generation != identity.generation

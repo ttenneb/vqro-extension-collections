@@ -1,9 +1,11 @@
-# Vqro Collections semantic shadow
+# Vqro Collections deterministic authority candidate
 
 This repository builds a **provisional, unpublished `0.0.0`** external Vqro
 component. Its single service is `collections`; its exact method set is
-`["host.document.render"]`. The service provides `host_document` and has one
-capability grants, exactly `host.state.read` and `host.terminals.read`.
+`["host.document.render", "host.document.action.invoke"]`. The service provides
+`host_document` and its only capability grants remain `host.state.read` and
+`host.terminals.read`. Action invocation is pure planning: it makes no host call
+and receives no write capability.
 
 The method strictly accepts a host-authored `host.document.render.v2` request,
 performs exactly one depth-1 `state.snapshot` followed by exactly one depth-1
@@ -25,10 +27,33 @@ exclusively terminal-snapshot-owned. Stale archive IDs are not rendered.
 Profiles under [`profiles/`](profiles/) define this package policy but remain
 source-only and are deliberately excluded from `.vqrox` artifacts.
 
-This extension has no mutation, action/effect, focus, filesystem, network,
-WASI, process, or self-spawn authority. It does not persist or cache documents.
-Cancellation is checked around each host call. Errors are static and never include request, snapshot,
-or host-error content.
+The package owns strict label-set, terminal-archive, and terminal-unarchive
+actions. A fenced invocation binds package/service/document/action IDs, bounded
+opaque payload, a sorted observed dependency vector, authority generation, and
+an exact `vqro.collections` state revision/value. It returns only a bounded
+`vqro.effect-plan.v1` containing exact preconditions and one whole-value,
+namespaced `state.cas`; the component never executes that plan. Generation
+mismatch, stale state dependency, malformed state, and malformed payload fail
+closed. Applying the replacement policy to the same terminal snapshot produces
+the deterministic updated document projection.
+
+The package action contracts and synchronized fixtures are under
+[`contracts/package/`](contracts/package/). The pinned host
+`host.document.v2` rejects action fields, so this package deliberately does not
+invent an attachment mechanism. Terminal slots remain generic host-owned
+terminal references and the package has no focus, navigation, placement, or
+terminal-lifecycle authority.
+
+A pure adapter for the pinned legacy shape is documented in
+[`profiles/collections-migration-v1.md`](profiles/collections-migration-v1.md).
+It emits policy values plus source digest/generation and an idempotent marker
+for a host-owned rollback/roll-forward journal; it performs no write or cutover.
+
+This extension has no direct mutation, rendering, focus, filesystem, network,
+socket, WASI, process, or self-spawn authority. It does not persist or cache
+documents and is never called per frame. Cancellation is checked around each
+render host call. Errors are static and never include request, snapshot, or
+host-error content.
 
 The exact public contract snapshots and authoritative host document fixtures
 used by the implementation are under [`contracts/`](contracts/). They are also

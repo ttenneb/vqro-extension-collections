@@ -1,0 +1,39 @@
+{
+  "$id": "urn:vqro.collections:effect-plan:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action_id": {"type": "string"}, "authority_generation": {"minimum": 1, "type": "integer"},
+    "contract": {"const": "vqro.effect-plan.v1"}, "document_id": {"type": "string"},
+    "effects": {"items": {"$ref": "#/$defs/cas"}, "maxItems": 1, "type": "array"},
+    "package_id": {"const": "vqro.collections"}, "preconditions": {"$ref": "#/$defs/preconditions"},
+    "service_id": {"const": "collections"}
+  },
+  "required": ["contract", "package_id", "service_id", "document_id", "action_id", "authority_generation", "preconditions", "effects"],
+  "type": "object",
+  "$defs": {
+    "dependency": {
+      "additionalProperties": false,
+      "properties": {"contract": {"type": "string"}, "generation": {"minimum": 1, "type": "integer"}, "revision": {"minimum": 1, "type": "integer"}, "scope_id": {"type": "string"}},
+      "required": ["contract", "scope_id", "revision", "generation"], "type": "object"
+    },
+    "preconditions": {
+      "additionalProperties": false,
+      "properties": {
+        "authority_generation": {"minimum": 1, "type": "integer"},
+        "observed_dependencies": {"items": {"$ref": "#/$defs/dependency"}, "maxItems": 64, "minItems": 1, "type": "array"},
+        "state_namespace": {"const": "vqro.collections"}, "state_revision": {"minimum": 0, "type": "integer"}
+      },
+      "required": ["authority_generation", "observed_dependencies", "state_namespace", "state_revision"], "type": "object"
+    },
+    "cas": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {"minimum": 0, "type": "integer"}, "expected_value": true,
+        "key": {"pattern": "^container_[0-9a-f]{16}$", "type": "string"}, "kind": {"const": "state.cas"},
+        "namespace": {"const": "vqro.collections"}, "value": {"type": "object"}
+      },
+      "required": ["kind", "namespace", "key", "expected_revision", "expected_value", "value"], "type": "object"
+    }
+  }
+}

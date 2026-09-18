@@ -1,5 +1,7 @@
-//! External, read-only Collections semantic shadow over public host snapshots.
+//! External Collections component: deterministic projection and effect planning only.
 
+pub mod action;
+pub mod migration;
 pub mod policy;
 pub mod projection;
 pub mod service;
@@ -33,7 +35,7 @@ mod guest {
         fn descriptor() -> Result<ServiceDescriptor, ServiceError> {
             Ok(ServiceDescriptor {
                 service_id: crate::service::SERVICE_ID.into(),
-                methods: vec![crate::service::METHOD.into()],
+                methods: vec![crate::service::METHOD.into(), crate::action::METHOD.into()],
             })
         }
 
@@ -48,6 +50,8 @@ mod guest {
     export!(Collections);
 }
 
+#[cfg(test)]
+mod action_tests;
 #[cfg(test)]
 mod policy_fixtures;
 #[cfg(test)]

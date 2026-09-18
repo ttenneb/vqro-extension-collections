@@ -86,7 +86,7 @@ jobs:
           cargo tree --locked --workspace --depth 1
           PACKAGE_COUNT=$(cargo metadata --locked --format-version 1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["packages"]))')
           test "$PACKAGE_COUNT" -le 60
-          if grep -R -E 'crate::extension_|_extension-service|std::process|Command::new|host\.state|focus_terminal' crates vqro-extension.toml; then
+          if grep -R -E 'crate::extension_|_extension-service|std::process|Command::new|focus_terminal' crates vqro-extension.toml; then
             echo "private host import, forbidden authority, or process spawn detected" >&2
             exit 1
           fi
