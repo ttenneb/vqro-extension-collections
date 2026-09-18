@@ -1,10 +1,12 @@
 //! Pure legacy-to-policy migration planning. No host calls or writes occur here.
 
 use crate::policy::{decode_policy_value, PolicyRecord, NAMESPACE};
+use serde::de::{Error as _, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::fmt;
 
 const MAX_SOURCE_BYTES: usize = 128 * 1024;
 pub const LEGACY_CONTRACT: &str = "vqro.collections.legacy.v1";
@@ -16,6 +18,7 @@ pub const MARKER_KEY: &str = "migration:legacy-v1";
 struct LegacyState {
     contract: String,
     source_generation: u64,
+    #[serde(deserialize_with = "deserialize_collections")]
     collections: BTreeMap<String, LegacyCollection>,
 }
 
@@ -25,6 +28,36 @@ struct LegacyCollection {
     #[serde(default, deserialize_with = "optional_non_null_label")]
     label: Option<String>,
     archived_terminal_ids: Vec<String>,
+}
+
+fn deserialize_collections<'de, D>(
+    deserializer: D,
+) -> Result<BTreeMap<String, LegacyCollection>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct CollectionsVisitor;
+    impl<'de> Visitor<'de> for CollectionsVisitor {
+        type Value = BTreeMap<String, LegacyCollection>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a collection map with unique container keys")
+        }
+
+        fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
+        where
+            A: MapAccess<'de>,
+        {
+            let mut values = BTreeMap::new();
+            while let Some((key, value)) = map.next_entry()? {
+                if values.insert(key, value).is_some() {
+                    return Err(A::Error::custom("duplicate container key"));
+                }
+            }
+            Ok(values)
+        }
+    }
+    deserializer.deserialize_map(CollectionsVisitor)
 }
 
 fn optional_non_null_label<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>

@@ -63,15 +63,15 @@ const CONTRACT_FILES: [(&str, &str); 21] = [
     ),
     (
         "contracts/package/collections-document-action-v1.schema.json",
-        "2b941875ec3414469b63287b805fde41ec127e6640d8f3a046e1662fcff87a0a",
+        "53eba0c5d593e7e6ef50c98b1d7f9afbda3725959966a8d4089e0e02ea838d4c",
     ),
     (
         "contracts/package/effect-plan-v1.schema.json",
-        "cacffe55d31509d8577db30c68c1e4a66b19146689d8c009d1b9f54994adcb35",
+        "4d9d02db5e60ad8241185e02566c9ac0778387fcfbe91f743562539e7c094024",
     ),
     (
         "contracts/package/collections-migration-v1.schema.json",
-        "271063c66c021127c0395bfb3cca4e60b3e0393166c4091203d9e469dea469bc",
+        "b46909f8f84a059e140bfcf367382053a6296f1657545cccac73fe2c177a93e5",
     ),
     (
         "contracts/fixtures/collections-actions/label-invocation.json",
@@ -91,7 +91,7 @@ const CONTRACT_FILES: [(&str, &str); 21] = [
     ),
     (
         "contracts/PROVENANCE.md",
-        "715bc2bd7d87252ea4f82cf38e371b106db51da5ab6dc99b0c6dab3c474c6b4d",
+        "98890cc600ef4a942037909e50018e434d9afa3889d7a25cdde8438790498ee1",
     ),
 ];
 #[cfg(test)]
@@ -133,11 +133,11 @@ const EXPECTED_PACKAGE_PATHS: [&str; 26] = [
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "02b2c414195b8ae08da579853b600dc6df8bafbcc924bb24183608e34f6bf2f9";
+    "d6aace91eeb892deff3ae4de7ef49bc5027c5676f0f55ab068445a3fcdc13210";
 const EXPECTED_MANIFEST_SHA256: &str =
     "1e03800d55f56eb959e9ebdabe6c0cc4380377683c5e2cbf939e792ca8f90304";
 const EXPECTED_COMPONENT_SHA256: &str =
-    "afbc83795434cbd92438193a34f71566438220848c67baa8de52d58615bb865e";
+    "f022298038a8ecf85ebe5e160bdc72702e0e83e29a2540d68bb5a243db980d4b";
 const MAX_COMPONENT_BYTES: usize = 512 * 1024;
 const MAX_PACKAGE_BYTES: usize = 8 * 1024 * 1024;
 const MAX_PACKAGE_FILE_BYTES: u64 = 8 * 1024 * 1024;

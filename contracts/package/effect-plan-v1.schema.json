@@ -231,6 +231,9 @@
   "x-semantic-invariants": [
     "dependencies are strictly sorted and unique",
     "policy container_id equals effect key and archived_terminal_ids are strictly sorted",
-    "expected and replacement labels are at most 4096 UTF-8 bytes"
+    "expected and replacement labels are at most 4096 UTF-8 bytes",
+    "top-level authority_generation equals preconditions.authority_generation",
+    "precondition and CAS store generations are equal",
+    "precondition and CAS state revisions are equal"
   ]
 }

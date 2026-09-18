@@ -190,6 +190,8 @@
     "archive arrays are strictly sorted",
     "labels are at most 4096 UTF-8 bytes",
     "each policy container_id equals its values key",
-    "marker digest and generation equal the plan top-level digest and generation"
+    "marker digest and generation equal the plan top-level digest and generation",
+    "exact source encoding is at most 131072 UTF-8 bytes",
+    "collection-map keys are unique on the JSON wire"
   ]
 }

@@ -267,6 +267,14 @@ fn legacy_migration_is_exact_and_idempotent() {
 
 #[test]
 fn migration_rejects_unknown_or_noncanonical_legacy_state() {
+    let duplicate = format!(
+        "{{\"contract\":\"{LEGACY_CONTRACT}\",\"source_generation\":1,\"collections\":{{\"{KEY}\":{{\"archived_terminal_ids\":[]}},\"{KEY}\":{{\"archived_terminal_ids\":[]}}}}}}"
+    );
+    assert_eq!(
+        migrate_legacy(duplicate.as_bytes()),
+        Err(MigrationError::Invalid)
+    );
+
     for source in [
         json!({"contract":LEGACY_CONTRACT,"source_generation":0,"collections":{}}),
         json!({"contract":LEGACY_CONTRACT,"source_generation":1,"collections":{KEY:{"archived_terminal_ids":[TERM2,TERM1]}}}),

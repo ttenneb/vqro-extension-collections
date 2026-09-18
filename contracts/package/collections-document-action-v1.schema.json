@@ -266,6 +266,7 @@
     "label is at most 4096 UTF-8 bytes; JSON Schema maxLength is only a structural precheck",
     "dependencies are strictly sorted and unique",
     "the sole host.state.v1 dependency equals the state store identity, revision + 1, and generation",
-    "policy container_id equals state.key and archived_terminal_ids are strictly sorted"
+    "policy container_id equals state.key and archived_terminal_ids are strictly sorted",
+    "payload.container_id equals state.key"
   ]
 }
