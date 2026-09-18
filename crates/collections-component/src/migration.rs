@@ -1,7 +1,7 @@
 //! Pure legacy-to-policy migration planning. No host calls or writes occur here.
 
 use crate::policy::{decode_policy_value, PolicyRecord, NAMESPACE};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -22,9 +22,16 @@ struct LegacyState {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LegacyCollection {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "optional_non_null_label")]
     label: Option<String>,
     archived_terminal_ids: Vec<String>,
+}
+
+fn optional_non_null_label<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    String::deserialize(deserializer).map(Some)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

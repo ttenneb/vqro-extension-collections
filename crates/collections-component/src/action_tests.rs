@@ -52,6 +52,49 @@ fn action(action_id: &str, payload: Value, value: Value) -> Vec<u8> {
 }
 
 #[test]
+fn package_schemas_pin_runtime_ids_shapes_and_semantic_limits() {
+    let action_schema: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/package/collections-document-action-v1.schema.json"
+    ))
+    .unwrap();
+    let effect_schema: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/package/effect-plan-v1.schema.json"
+    ))
+    .unwrap();
+    let migration_schema: Value = serde_json::from_slice(include_bytes!(
+        "../../../contracts/package/collections-migration-v1.schema.json"
+    ))
+    .unwrap();
+    assert_eq!(action_schema["properties"]["contract"]["const"], CONTRACT);
+    assert_eq!(
+        action_schema["$defs"]["state"]["properties"]["value"]["oneOf"][1]["$ref"],
+        "#/$defs/policy"
+    );
+    assert_eq!(
+        effect_schema["properties"]["contract"]["const"],
+        EFFECT_PLAN_CONTRACT
+    );
+    assert_eq!(effect_schema["properties"]["effects"]["minItems"], 1);
+    assert_eq!(
+        effect_schema["$defs"]["cas"]["properties"]["value"]["$ref"],
+        "#/$defs/policy"
+    );
+    assert_eq!(
+        migration_schema["$defs"]["legacy_input"]["properties"]["contract"]["const"],
+        LEGACY_CONTRACT
+    );
+    assert_eq!(
+        migration_schema["$defs"]["migration_plan"]["properties"]["contract"]["const"],
+        MIGRATION_CONTRACT
+    );
+    for schema in [&action_schema, &effect_schema, &migration_schema] {
+        assert!(schema["x-semantic-invariants"]
+            .as_array()
+            .is_some_and(|items| !items.is_empty()));
+    }
+}
+
+#[test]
 fn action_service_dispatch_is_zero_ambient_and_zero_host_call() {
     let params: Value = serde_json::from_slice(include_bytes!(
         "../../../contracts/fixtures/collections-actions/label-invocation.json"
@@ -227,6 +270,8 @@ fn migration_rejects_unknown_or_noncanonical_legacy_state() {
     for source in [
         json!({"contract":LEGACY_CONTRACT,"source_generation":0,"collections":{}}),
         json!({"contract":LEGACY_CONTRACT,"source_generation":1,"collections":{KEY:{"archived_terminal_ids":[TERM2,TERM1]}}}),
+        json!({"contract":LEGACY_CONTRACT,"source_generation":1,"collections":{KEY:{"archived_terminal_ids":[],"label":null}}}),
+        json!({"contract":LEGACY_CONTRACT,"source_generation":1,"collections":{"container_0000000000000000":{"archived_terminal_ids":[]}}}),
         json!({"contract":LEGACY_CONTRACT,"source_generation":1,"collections":{},"unknown":true}),
     ] {
         assert_eq!(

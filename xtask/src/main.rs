@@ -59,19 +59,19 @@ const CONTRACT_FILES: [(&str, &str); 21] = [
     ),
     (
         "contracts/package/README.md",
-        "efef31440b91de8b05ff99ef857a301864b05a141f7e0c1c13fdc3fa4708515a",
+        "657bce1dc08287fb7e8df683c10c596ffc0bb867317abbd1ca91ed9137ad8854",
     ),
     (
         "contracts/package/collections-document-action-v1.schema.json",
-        "6f8e66d759fa61e2419d912bbb91f02440505a08ab7e3addd229bc70d7fd73a2",
+        "2b941875ec3414469b63287b805fde41ec127e6640d8f3a046e1662fcff87a0a",
     ),
     (
         "contracts/package/effect-plan-v1.schema.json",
-        "e19814f1bb52fadbac5a18d4ccc662027b4a0abcd424151d16ebed07d2c4d7cb",
+        "cacffe55d31509d8577db30c68c1e4a66b19146689d8c009d1b9f54994adcb35",
     ),
     (
         "contracts/package/collections-migration-v1.schema.json",
-        "e3dc275dcc08d546c27837af4619f297f65a4a419771ff685af8280edc980ad5",
+        "271063c66c021127c0395bfb3cca4e60b3e0393166c4091203d9e469dea469bc",
     ),
     (
         "contracts/fixtures/collections-actions/label-invocation.json",
@@ -91,7 +91,7 @@ const CONTRACT_FILES: [(&str, &str); 21] = [
     ),
     (
         "contracts/PROVENANCE.md",
-        "51636642391755c68de1595d4b351eb0ea1bc7a1e32130d79df91bc7a8f5a1fb",
+        "715bc2bd7d87252ea4f82cf38e371b106db51da5ab6dc99b0c6dab3c474c6b4d",
     ),
 ];
 #[cfg(test)]
@@ -133,7 +133,7 @@ const EXPECTED_PACKAGE_PATHS: [&str; 26] = [
     "vqro-extension.toml",
 ];
 const EXPECTED_PACKAGE_SHA256: &str =
-    "d9d05c130f8b79e0e508269d3872bf7491733c07186d69c7d4bde7100e175859";
+    "02b2c414195b8ae08da579853b600dc6df8bafbcc924bb24183608e34f6bf2f9";
 const EXPECTED_MANIFEST_SHA256: &str =
     "1e03800d55f56eb959e9ebdabe6c0cc4380377683c5e2cbf939e792ca8f90304";
 const EXPECTED_COMPONENT_SHA256: &str =

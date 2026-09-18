@@ -44,10 +44,10 @@ claim or grant host execution semantics:
 
 | Local path | Ownership | SHA-256 |
 | --- | --- | --- |
-| `package/README.md` | `vqro.collections` package | `efef31440b91de8b05ff99ef857a301864b05a141f7e0c1c13fdc3fa4708515a` |
-| `package/collections-document-action-v1.schema.json` | `vqro.collections` package | `6f8e66d759fa61e2419d912bbb91f02440505a08ab7e3addd229bc70d7fd73a2` |
-| `package/effect-plan-v1.schema.json` | `vqro.collections` package | `e19814f1bb52fadbac5a18d4ccc662027b4a0abcd424151d16ebed07d2c4d7cb` |
-| `package/collections-migration-v1.schema.json` | `vqro.collections` package | `e3dc275dcc08d546c27837af4619f297f65a4a419771ff685af8280edc980ad5` |
+| `package/README.md` | `vqro.collections` package | `657bce1dc08287fb7e8df683c10c596ffc0bb867317abbd1ca91ed9137ad8854` |
+| `package/collections-document-action-v1.schema.json` | `vqro.collections` package | `2b941875ec3414469b63287b805fde41ec127e6640d8f3a046e1662fcff87a0a` |
+| `package/effect-plan-v1.schema.json` | `vqro.collections` package | `cacffe55d31509d8577db30c68c1e4a66b19146689d8c009d1b9f54994adcb35` |
+| `package/collections-migration-v1.schema.json` | `vqro.collections` package | `271063c66c021127c0395bfb3cca4e60b3e0393166c4091203d9e469dea469bc` |
 | `fixtures/collections-actions/label-invocation.json` | `vqro.collections` package | `096272d3f6cac1b895a8f5b14acf9d948364c28bffe800cf6ae960840936838f` |
 | `fixtures/collections-actions/label-effect-plan.json` | `vqro.collections` package | `b85e5bb40a9b32750bda8add8a46bd3226369bba7b1ae83bc1db51e8a15f2038` |
 | `fixtures/collections-migration/legacy-input.json` | `vqro.collections` package | `e0bcdfc38775520e5a7a1d1426d07518a6521544975f6f4344946ab8ac4177fd` |

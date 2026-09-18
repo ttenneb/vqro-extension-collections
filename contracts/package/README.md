@@ -1,7 +1,10 @@
 # Package-owned action/effect contract
 
 These schemas pin the `vqro.collections` component boundary implemented by this
-package. They are not host Collections APIs and grant no execution authority.
+package. JSON Schema expresses the structural subset; each schema's
+`x-semantic-invariants` lists byte-count, ordering, key/value identity, and
+cross-field equalities enforced by the package decoder but not expressible in
+standard JSON Schema. They are not host Collections APIs and grant no execution authority.
 The host may validate and execute a returned plan only under its own current
 authority fence.
 

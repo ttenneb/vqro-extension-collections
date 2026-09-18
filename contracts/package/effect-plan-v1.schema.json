@@ -4,49 +4,233 @@
   "additionalProperties": false,
   "description": "The observed dependency vector is copied byte-semantically from a validated invocation and remains strictly sorted and unique.",
   "properties": {
-    "action_id": {"enum": ["vqro.collections.label.set", "vqro.collections.terminal.archive", "vqro.collections.terminal.unarchive"]},
-    "authority_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-    "contract": {"const": "vqro.effect-plan.v1"},
-    "document_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$", "type": "string"},
-    "effects": {"items": {"$ref": "#/$defs/cas"}, "maxItems": 1, "minItems": 1, "type": "array"},
-    "package_id": {"const": "vqro.collections"}, "preconditions": {"$ref": "#/$defs/preconditions"},
-    "service_id": {"const": "collections"}
+    "action_id": {
+      "enum": [
+        "vqro.collections.label.set",
+        "vqro.collections.terminal.archive",
+        "vqro.collections.terminal.unarchive"
+      ]
+    },
+    "authority_generation": {
+      "maximum": 18446744073709551615,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "contract": {
+      "const": "vqro.effect-plan.v1"
+    },
+    "document_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:/-]+$",
+      "type": "string"
+    },
+    "effects": {
+      "items": {
+        "$ref": "#/$defs/cas"
+      },
+      "maxItems": 1,
+      "minItems": 1,
+      "type": "array"
+    },
+    "package_id": {
+      "const": "vqro.collections"
+    },
+    "preconditions": {
+      "$ref": "#/$defs/preconditions"
+    },
+    "service_id": {
+      "const": "collections"
+    }
   },
-  "required": ["contract", "package_id", "service_id", "document_id", "action_id", "authority_generation", "preconditions", "effects"],
+  "required": [
+    "contract",
+    "package_id",
+    "service_id",
+    "document_id",
+    "action_id",
+    "authority_generation",
+    "preconditions",
+    "effects"
+  ],
   "type": "object",
   "$defs": {
     "dependency": {
       "additionalProperties": false,
       "properties": {
-        "contract": {"maxLength": 128, "pattern": "^[a-z0-9-]+(?:\\.[a-z0-9-]+)+$", "type": "string"},
-        "generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-        "revision": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-        "scope_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:/-]+$", "type": "string"}
+        "contract": {
+          "maxLength": 128,
+          "pattern": "^[a-z0-9-]+(?:\\.[a-z0-9-]+)+$",
+          "type": "string"
+        },
+        "generation": {
+          "maximum": 18446744073709551615,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "revision": {
+          "maximum": 18446744073709551615,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "scope_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:/-]+$",
+          "type": "string"
+        }
       },
-      "required": ["contract", "scope_id", "revision", "generation"], "type": "object"
+      "required": [
+        "contract",
+        "scope_id",
+        "revision",
+        "generation"
+      ],
+      "type": "object"
     },
     "preconditions": {
       "additionalProperties": false,
       "properties": {
-        "authority_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-        "observed_dependencies": {"items": {"$ref": "#/$defs/dependency"}, "maxItems": 64, "minItems": 1, "type": "array"},
-        "state_namespace": {"const": "vqro.collections"},
-        "state_revision": {"maximum": 18446744073709551614, "minimum": 0, "type": "integer"},
-        "state_store_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-        "state_store_id": {"maxLength": 128, "minLength": 1, "pattern": "^[A-Za-z0-9._:-]+$", "type": "string"}
+        "authority_generation": {
+          "maximum": 18446744073709551615,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "observed_dependencies": {
+          "items": {
+            "$ref": "#/$defs/dependency"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "type": "array"
+        },
+        "state_namespace": {
+          "const": "vqro.collections"
+        },
+        "state_revision": {
+          "maximum": 18446744073709551614,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_store_generation": {
+          "maximum": 18446744073709551615,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "state_store_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:-]+$",
+          "type": "string"
+        }
       },
-      "required": ["authority_generation", "observed_dependencies", "state_namespace", "state_store_id", "state_store_generation", "state_revision"], "type": "object"
+      "required": [
+        "authority_generation",
+        "observed_dependencies",
+        "state_namespace",
+        "state_store_id",
+        "state_store_generation",
+        "state_revision"
+      ],
+      "type": "object"
     },
     "cas": {
       "additionalProperties": false,
       "properties": {
-        "expected_revision": {"maximum": 18446744073709551614, "minimum": 0, "type": "integer"},
-        "expected_store_generation": {"maximum": 18446744073709551615, "minimum": 1, "type": "integer"},
-        "expected_value": {"oneOf": [{"type": "null"}, {"type": "object"}]},
-        "key": {"not": {"enum": ["container_0000000000000000", "container_ffffffffffffffff"]}, "pattern": "^container_[0-9a-f]{16}$", "type": "string"},
-        "kind": {"const": "state.cas"}, "namespace": {"const": "vqro.collections"}, "value": {"type": "object"}
+        "expected_revision": {
+          "maximum": 18446744073709551614,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "expected_store_generation": {
+          "maximum": 18446744073709551615,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_value": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/policy"
+            }
+          ]
+        },
+        "key": {
+          "$ref": "#/$defs/container_id"
+        },
+        "kind": {
+          "const": "state.cas"
+        },
+        "namespace": {
+          "const": "vqro.collections"
+        },
+        "value": {
+          "$ref": "#/$defs/policy"
+        }
       },
-      "required": ["kind", "namespace", "key", "expected_store_generation", "expected_revision", "expected_value", "value"], "type": "object"
+      "required": [
+        "kind",
+        "namespace",
+        "key",
+        "expected_store_generation",
+        "expected_revision",
+        "expected_value",
+        "value"
+      ],
+      "type": "object"
+    },
+    "container_id": {
+      "not": {
+        "enum": [
+          "container_0000000000000000",
+          "container_ffffffffffffffff"
+        ]
+      },
+      "pattern": "^container_[0-9a-f]{16}$",
+      "type": "string"
+    },
+    "policy": {
+      "additionalProperties": false,
+      "properties": {
+        "archived_terminal_ids": {
+          "items": {
+            "pattern": "^term_[0-9a-f]{32}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "container_id": {
+          "$ref": "#/$defs/container_id"
+        },
+        "label": {
+          "description": "Runtime additionally enforces 4096 UTF-8 bytes.",
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "schema": {
+          "const": "vqro.collections.policy"
+        },
+        "schema_version": {
+          "const": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schema",
+        "schema_version",
+        "container_id",
+        "archived_terminal_ids"
+      ],
+      "type": "object"
     }
-  }
+  },
+  "x-semantic-invariants": [
+    "dependencies are strictly sorted and unique",
+    "policy container_id equals effect key and archived_terminal_ids are strictly sorted",
+    "expected and replacement labels are at most 4096 UTF-8 bytes"
+  ]
 }
